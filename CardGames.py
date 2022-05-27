@@ -1,4 +1,6 @@
+import Cards
 from Cards import deck
+from enum import Enum
 from Cards import *
 from tkinter import *
 import random
@@ -38,179 +40,191 @@ wall_label.place(x = -3, y = -3)
 
 window.mainloop()
 '''
-#for card in deck:
-#    print(card)
-class Player(object):
-    def __init__(self, chip):
-        self.card = [-1,-1,-1]
-        self.chip = chip
 
-    def SetCards(self, a, b, c):
-        self.card = [a,b,c]
+def DrawLine():
+    print("=======================================")
+
+class Combination(Enum):
+    TOP = 0
+    DOUBLE = 1
+    STRAIGHT = 2
+    TRIPLE = 3
+
+class Player():
+    def __init__(self, chip):
+        self.chip : int = chip
+        self.hand = [-1,-1,-1]
+        self.combine = Combination.TOP
+        self.top = -1
 
     def GetCombine(self):
-        self.card.sort()
-        if(self.card[0] == self.card[1] == self.card[2]):
-            return 3
-        elif(self.card[0] == self.card[1]-1 == self.card[2]-2):
-            return 2
-        elif(self.card[0] == self.card[1] or self.card[1] == self.card[2]):
-            return 1
+        hand_temp = self.hand
+        hand_temp.sort()
+        if(hand_temp[0] == hand_temp[1] ==hand_temp[2]):
+            self.combine = Combination.TRIPLE
+            self.top = self.hand[2]
+        elif(hand_temp[0] == hand_temp[1] - 1 == hand_temp[2] - 9 or hand_temp[0] == hand_temp[1] - 1 == hand_temp[2] - 2):
+            self.combine = Combination.STRAIGHT
+            if(hand_temp[1] == 1):
+                self.top = self.hand[1]
+            else:
+                self.top = self.hand[2]
+        elif(hand_temp[0] == hand_temp[1] or hand_temp[1] == hand_temp[2]):
+            self.combine = Combination.DOUBLE
+            self.top = hand_temp[1]
         else:
+            self.combine = Combination.TOP
+            self.top = hand_temp[2]
+
+    def BetChip(self, value : int) -> int:
+        if(value > self.chip):
             return 0
+        self.chip -= value
+        return value
 
     def PrintCards(self):
-        print(self.card[0], self.card[1], self.card[2])
-movedMoney = 0
+        print("public:{}, {}".format(Cards.Card(self.hand[0]), Cards.Card(self.hand[1])))
+        print("opponent:{}".format(Cards.Card(self.hand[2])))
+
+class GameLogic():
+    def __init__(self):
+        self.deck = Cards.StandardDeck()
+        self.deck.shuffle()
+        self.betMoney = 0
+        self.carriedMoney = 0
+
+    def DealCard(self, p1 : Player, p2 : Player):
+        if(len(self.deck) == 0):
+            self.ReloadDeck()
+        card1 : Cards.Card = self.deck.deal()
+        card2 : Cards.Card = self.deck.deal()
+        p1.hand = [card1.value, card2.value, self.deck.deal().value]
+        p2.hand = [card1.value, card2.value, self.deck.deal().value]
+
+    def PrintStatus(self, p1 : Player):
+        print("-----------------------------------")
+        print("Opponent:", Cards.Card(p1.hand[2]))
+        print("public:", Cards.Card(p1.hand[0]), Cards.Card(p1.hand[1]))
+        print("-----------------------------------")
+
+    def GetMatch(self, p1 : Player, p2 : Player):
+        p1.GetCombine()
+        p2.GetCombine()
+        if(p1.combine == p2.combine):
+            if(p1.top == p2.top):
+                return 0
+            elif(p1.top > p2.top):
+                return -1
+            elif(p1.top < p2.top):
+                return 1
+        elif(p1.combine.value > p2.combine.value):
+            return -1
+        elif(p1.combine.value < p2.combine.value):
+            return 1
+
+    def RoundResult(self, p1, p2, money):
+        result = self.GetMatch(p1, p2)
+        if(result == -1):
+            print("Player 1 won!")
+            p1.chip += money
+            self.carriedMoney=0
+            return 0
+        elif(result == 0):
+            print("Draw")
+            return money
+        elif(result == 1):
+            print("Player 2 won!")
+            p2.chip += money
+            self.carriedMoney = 0
+            return 0
+
+    def ReloadDeck(self):
+        self.deck = Cards.StandardDeck()
+        self.deck.shuffle()
 
 while(1):
+    DrawLine()
     print("게임 시작")
     print("1. 시작")
     print("2. 종료")
-    x = input()
-    x = int(x)
+    x = int(input("선택:"))
+
     if(x == 1):
+        DrawLine()
         money = int(input("시작 코인:"))
-        deck.shuffle()
+        game = GameLogic()
+        #p1: 상대 p2: 나(플레이어)
         p1 = Player(money)
         p2 = Player(money)
         while(1):
-            if(p1.chip <= 0):
-                print("Player2 won")
-                break
-            if (p2.chip <= 0):
-                print("Player1 won")
-                break
+            DrawLine();
+            if(game.carriedMoney == 0):
+                if(p1.chip <= 0):
+                    print("Player2 won")
+                    break
+                if (p2.chip <= 0):
+                    print("Player1 won")
+                    break
+                game.betMoney = p1.BetChip(1) + p2.BetChip(1)
+            else:
+                game.betMoney = game.carriedMoney
+                game.carriedMoney = 0
 
-            if(len(deck)==0):
-                deck = StandardDeck()
-                deck.shuffle()
+            #보유 Chip 출력
             print("player1:", p1.chip, "player2:", p2.chip)
+            print("Base:", game.betMoney)
 
-            card1 = deck.deal()
-            card2 = deck.deal()
-            p1.chip -= 1
-            p1.SetCards(card1.value, card2.value, deck.deal().value)
-            p2.chip -= 1
-            p2.SetCards(card1.value, card2.value, deck.deal().value)
-            bet = 2 + movedMoney
+            #카드 분배
+            game.DealCard(p1, p2)
 
-            print("public:", card1.value,", ",card2.value)
-            print("p1:",p1.card[2])
+            #상대 카드 출력
+            p1.PrintCards()
 
             print("1. Bet\n2. call\n3. fold")
-            x = input()
-            x = int(x)
+            x = int(input("선택:"))
 
             while(1):
                 if(x == 1):
                     #금액 베팅
                     while(1):
+                        #베팅 금액 입력
                         money = int(input("Bet Chip:"))
-                        if(p2.chip < money):
-                            print("No money")
+                        # 내 칩이나 상대 칩이 모자르면 다시 입력
+                        if(p1.chip < money or p2.chip < money):
+                            max : int = 0
+                            if(p1.chip < p2.chip):
+                                max = p1.chip
+                            else:
+                                max = p2.chip
+                            print("No chips, try again(max value:{})".format(max))
                         else:
-                            p1.chip -= money
-                            p2.chip -= money
-                            bet += money*2
+                            game.betMoney += p1.BetChip(money) + p2.BetChip(money)
                             break
-                    combine1 = int(p1.GetCombine())
-                    combine2 = int(p2.GetCombine())
-                    if(combine1 == combine2):
-                        match = int(p1.GetCombine())
-                        result1 = 0
-                        result2 = 0
-                        if(match == 1):
-                            result1 = p1.card[1]
-                            result2 = p2.card[1]
-                            if(result1 == result2):
-                                result1 = p1.card[2]
-                                result2 = p2.card[2]
-                        else:
-                            result1 = p1.card[2]
-                            result2 = p2.card[2]
-
-                        if(result1 == result2):
-                            print("draw")
-                            movedMoney = bet
-                            #Draw
-                            break
-                        elif(result1 > result2):
-                            print("player1 won")
-                            p1.chip += bet
-                            movedMoney = 0
-                            break
-                        elif(result1 < result2):
-                            print("player2 won")
-                            p2.chip += bet
-                            movedMoney = 0
-                            break
-                    elif(combine1 > combine2):
-                        print("player1 won")
-                        p1.chip += bet
-                        movedMoney = 0
-                        break
-                    elif (combine1 < combine2):
-                        print("player2 won")
-                        p2.chip += bet
-                        movedMoney = 0
-                        break
+                    # 원래는 GetMatch도 하지말고 상대가 call 하면 GetMatch,break 해야 하는데 컴퓨터랑 하니깐 일단 한번만 돌려요
+                    print("Player 1:")
+                    p1.PrintCards()
+                    print("Player 2:")
+                    p2.PrintCards()
+                    game.RoundResult(p1, p2, game.betMoney)
+                    break
                 elif(x == 2):
                     #비교 후 종료
-                    combine1 = int(p1.GetCombine())
-                    combine2 = int(p2.GetCombine())
-                    if (combine1 == combine2):
-                        match = int(p1.GetCombine())
-                        result1 = 0
-                        result2 = 0
-                        if (match == 1):
-                            result1 = p1.card[1]
-                            result2 = p2.card[1]
-                            if (result1 == result2):
-                                result1 = p1.card[2]
-                                result2 = p2.card[2]
-                        else:
-                            result1 = p1.card[2]
-                            result2 = p2.card[2]
-
-                        if (result1 == result2):
-                            print("draw")
-                            movedMoney = bet
-                            # Draw
-                            break
-                        elif (result1 > result2):
-                            print("player1 won")
-                            p1.chip += bet
-                            movedMoney = 0
-                            break
-                        elif (result1 < result2):
-                            print("player2 won")
-                            p2.chip += bet
-                            movedMoney = 0
-                            break
-                    elif (combine1 > combine2):
-                        print("player1 won")
-                        p1.chip += bet
-                        movedMoney = 0
-                        break
-                    elif (combine1 < combine2):
-                        print("player2 won")
-                        p2.chip += bet
-                        movedMoney = 0
-                        break
+                    print("Player 1:")
+                    p1.PrintCards()
+                    print("Player 2:")
+                    p2.PrintCards()
+                    game.RoundResult(p1, p2, game.betMoney)
+                    break
                 elif(x == 3):
-                    combine2 = int(p2.GetCombine())
-                    if(combine2 >= 2):
+                    if(p2.GetCombine() >= Combination.STRAIGHT):
                         p2.chip -= 10
-                        bet += 10
+                        game.betMoney += 10
 
-                    p1.chip += bet
+                    p1.chip += game.betMoney
+                    game.betMoney = 0
                     break
 
-            print("player1:")
-            p1.PrintCards()
-            print("player2:")
-            p2.PrintCards()
+
 
     elif(x==2):
         break
