@@ -77,9 +77,9 @@ class Game:
         self.players = []
         self.players.append(Player('Patrick', 0))
         self.players.append(Player('Gorge', 1))
-        self.players.append(Player('Chen', 2))
-        self.players.append(Player('Jason', 3))
-        self.players.append(Player('Marie', 4))
+        # self.players.append(Player('Chen', 2))
+        # self.players.append(Player('Jason', 3))
+        # self.players.append(Player('Marie', 4))
 
     def InitializePot(self):
         self.pot = Pot()

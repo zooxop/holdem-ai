@@ -23,7 +23,7 @@ class Player:
         self.position = position
         self.holecards = []
         self.round_result = None
-        self.current_money = 100
+        self.current_money = 30
         self.current_status = "Alive"
 
     def add_cards(self, aCard):
@@ -44,10 +44,10 @@ class Player:
             return self.withdraw_money(bet_amount)
 
     def withdraw_money(self, withdraw_amount):
-        if (self.current_money > withdraw_amount):
+        if self.current_money > withdraw_amount:
             self.current_money -= withdraw_amount
             return "normal"
-        elif (self.current_money == withdraw_amount):
+        elif self.current_money == withdraw_amount:
             self.current_money = 0
             return "allin"
         else:
@@ -78,7 +78,7 @@ class Deck:
 
         # write some codes for initialize the deck
         for i in range(0, 4):
-            for j in range(0, 13):
+            for j in range(0, 10):
                 self.deck_cards.append(Card(i, j))
 
     def ShuffleDeck(self):
