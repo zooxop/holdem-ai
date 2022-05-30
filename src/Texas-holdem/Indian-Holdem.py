@@ -6,6 +6,9 @@ from CardCommon import *
 
 PLAYER_CARD = 'player_card'
 COMMUNITY_CARD = 'community_card'
+AI_CARD = 'ai_card'
+COLOR_INACTIVE = pygame.Color('lightskyblue3')
+COLOR_ACTIVE = pygame.Color('dodgerblue2')
 
 
 class Game:
@@ -14,9 +17,10 @@ class Game:
     STATE_PREPARING = 'preparing'
     STATE_PREFLOP = 'preflop'
     STATE_FLOP = 'flop'
-    STATE_TURN = 'turn'
-    STATE_RIVER = 'river'
     STATE_SHOWDOWN = 'showdown'
+    STATE_BET = 'bet'
+    STATE_CALL = 'call'
+    STATE_FOLD = 'fold'
 
     def __init__(self, evManager):
         self.game_deck = Deck()
@@ -40,13 +44,41 @@ class Game:
             elif self.state == Game.STATE_PREFLOP:
                 self.deal_flop()
             elif self.state == Game.STATE_FLOP:
-                self.deal_turn()
-            elif self.state == Game.STATE_TURN:
-                self.deal_river()
-            elif self.state == Game.STATE_RIVER:
                 self.show_down()
             elif self.state == Game.STATE_SHOWDOWN:
                 self.InitializeRound()
+
+        if isinstance(event, EnterTest):
+            print("Enter is working")
+
+        if isinstance(event, MouseClickEvent):
+            mouse = pygame.mouse.get_pos()
+
+            btnWidth = 150
+            btnHeight = 40
+            inputWidth = 140
+
+            btnX = 800
+            btnBetY = 450
+            btnCallY = 510
+            btnFoldY = 570
+
+            inputX = 600
+
+            if mouse[0] in range(btnX, btnX + btnWidth):
+                if mouse[1] in range(btnBetY, btnBetY + btnHeight):
+                    # BET button click
+                    self.ClickBetButton()
+                elif mouse[1] in range(btnCallY, btnCallY + btnHeight):
+                    # CALL button click
+                    self.ClickCallButton()
+                elif mouse[1] in range(btnFoldY, btnFoldY + btnHeight):
+                    # FOLD button click
+                    self.ClickFoldButton()
+            elif mouse[0] in range(inputX, inputX + inputWidth):  # 베팅 금액 input box
+                self.ClickInputBox(mouse)
+            # 여기서 베팅 금액 합산해주기.
+            # to-do : 코인 개수 표시해주기.
 
     def Start(self):
         print('-------------------------------------------------------')
@@ -75,62 +107,65 @@ class Game:
 
     def InitializePlayers(self):
         self.players = []
-        self.players.append(Player('Patrick', 0))
-        self.players.append(Player('Gorge', 1))
-        self.players.append(Player('Chen', 2))
-        self.players.append(Player('Jason', 3))
-        self.players.append(Player('Marie', 4))
+        self.players.append(Player('Computer', 0))
+        self.players.append(Player('User', 1))
 
     def InitializePot(self):
         self.pot = Pot()
 
-    # pre-flop: 플레이어들에게 카드를 2장씩 나눠준다.
+    def ClickBetButton(self):
+        self.evManager.Post(ClickBetButton())
+
+    def ClickCallButton(self):
+        self.evManager.Post(ClickCallButton())
+
+    def ClickFoldButton(self):
+        self.evManager.Post(ClickFoldButton())
+
+    def ClickInputBox(self, mouse):
+        self.evManager.Post(ClickInputBox(mouse))
+
+    # pre-flop: 플레이어들에게 카드를 1장씩 나눠준다.
     def deal_preflop(self):
         self.state = Game.STATE_PREFLOP
         print('-------------------------------------------------------')
         print('Pre-Flop Stage: Deal 2 Hold Cards for each players')
         player_count = len(self.players)
 
-        # allocate card to players (2 per each)
-        for i in range(player_count * 2):
+        for i in range(player_count):
             self.players[i % player_count].add_cards(self.game_deck.Pop_card())
 
         self.evManager.Post(PreFlopEvent(self.players))
         self.PrintCards()
 
-    # flop : 커뮤니티 카드 3장을 깔아준다.
+    # flop : 커뮤니티 카드 2장을 깔아준다.
     def deal_flop(self):
         self.state = Game.STATE_FLOP
         print('-------------------------------------------------------')
-        print('Flop Stage: Deal 3 Community Cards')
-        for i in range(3):
+        print('Flop Stage: Deal 2 Community Cards')
+        for i in range(2):
             self.community_cards.append(self.game_deck.Pop_card())
 
         self.evManager.Post(FlopEvent(self.community_cards))
         self.PrintCards()
 
-    # turn : 커뮤니티 카드 1장을 깔아준다.
-    def deal_turn(self):
-        self.state = Game.STATE_TURN
+    # bet : 원하는 금액 베팅
+    def deal_bet(self):
+        self.state = Game.STATE_BET
         print('-------------------------------------------------------')
-        print('Turn Stage: Deal 1 Community Card')
-        new_community_card = self.game_deck.Pop_card()
-        self.community_cards.append(new_community_card)
+        print('Bet Stage: 베팅할 금액 입력')
 
-        self.evManager.Post(TurnEvent(new_community_card))
-        self.PrintCards()
-
-    # river : 커뮤니티 카드 1장을 깔아준다.
-    def deal_river(self):
-        self.state = Game.STATE_RIVER
+    # call : 추가 베팅 없이 진행
+    def deal_call(self):
+        self.state = Game.STATE_CALL
         print('-------------------------------------------------------')
-        print('River Stage: Deal 1 Community Card')
-        new_community_card = self.game_deck.Pop_card()
-        self.community_cards.append(new_community_card)
+        print('Call Stage: 추가 베팅 없이 진행')
 
-        self.evManager.Post(RiverEvent(new_community_card))
-
-        self.PrintCards()
+    # fold : 현재 턴 포기
+    def deal_fold(self):
+        self.state = Game.STATE_FOLD
+        print('-------------------------------------------------------')
+        print('Fold Stage: 현재 턴 포기')
 
     # show_down : 승자를 확인한다.
     def show_down(self):
@@ -285,15 +320,22 @@ class KeyboardController:
                 elif event.type == KEYDOWN \
                         and event.key == pygame.K_ESCAPE:
                     ev = QuitEvent()
-
                 elif event.type == KEYDOWN \
                         and event.key == (K_DOWN or K_UP or K_LEFT or K_RIGHT):
                     # print 'key down up left right pressed'
                     ev = NextTurnEvent()
-
                 elif event.type == pygame.KEYDOWN \
                         and event.key == K_SPACE:
                     ev = GameStartRequest()
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    ev = MouseClickEvent()
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+                    ev = BetChipEvent()  # 베팅 금액 합산 로직 to do
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_BACKSPACE:
+                    ev = BackSpaceEvent()
+                elif event.type == pygame.KEYDOWN \
+                        and event.key in range(K_0, K_9+1):
+                    ev = InputNumbers(event.key)
 
                 if ev:
                     self.evManager.Post(ev)
@@ -307,6 +349,7 @@ class CardSprite(pygame.sprite.Sprite):
 
     def __init__(self, card, src_pos, dest_pos, type, group=None):
         pygame.sprite.Sprite.__init__(self, group)
+        self.type = type
         self.src_image = pygame.image.load(self.GetCardImageName(card))
         self.image = self.src_image
         self.pos = [0.0, 0.0]
@@ -314,13 +357,13 @@ class CardSprite(pygame.sprite.Sprite):
         self.pos[1] = src_pos[1] * 1.0  # float
         self.dest_pos = dest_pos
         self.src_pos = src_pos
-        self.type = type
+        # self.type = type
         self.rect = self.src_image.get_rect()
 
     def update(self, seconds):
         # updated position over the destination pos
         # calibrate the final pos not over the dest_pos
-        if (self.type == PLAYER_CARD or self.type == COMMUNITY_CARD):
+        if self.type == PLAYER_CARD or self.type == COMMUNITY_CARD or self.type == AI_CARD:
             if self.dest_pos[0] - self.src_pos[0] < 0 \
                     and self.dest_pos[0] <= self.pos[0]:
                 self.pos[0] += self.GetDelX(self.SPEED, seconds)
@@ -352,34 +395,14 @@ class CardSprite(pygame.sprite.Sprite):
         return (-1.0) * (self.src_pos[1] - self.dest_pos[1]) / seconds / speed
 
     def GetCardImageName(self, card):
-        suit = card.GetSuit()
         rank = card.GetRank()
 
-        suit_str = ''
-        rank_str = ''
+        rank_str = str(rank+1)
 
-        if suit == 0:
-            suit_str = 'spades'
-        elif suit == 1:
-            suit_str = 'diamonds'
-        elif suit == 2:
-            suit_str = 'hearts'
-        elif suit == 3:
-            suit_str = 'clubs'
-
-        if rank == 0:
-            rank_str = 'ace'
-        elif rank > 0 and rank < 10:
-            rank_str = str(rank + 1)
-        elif rank == 10:
-            rank_str = 'jack'
-        elif rank == 11:
-            rank_str = 'queen'
-        elif rank == 12:
-            rank_str = 'king'
-
-        tmp_str = 'assets/' + rank_str + '_' + suit_str + '.png'
-        return tmp_str
+        if self.type == PLAYER_CARD:
+            return 'assets/Card_Back.png'
+        elif self.type == AI_CARD or self.type == COMMUNITY_CARD:
+            return 'assets/Card_' + rank_str + '.png'
 
 
 class TableSprite(pygame.sprite.Sprite):
@@ -492,8 +515,6 @@ class TextSprite(pygame.sprite.Sprite):
                 del_f_size = 0.1 * self.fontsize
 
             self.fontsize += int(del_f_size)
-
-
         else:
             self.ChangeMakeBigger()
 
@@ -516,19 +537,115 @@ class RectSprite(pygame.sprite.Sprite):
         pass
 
 
+class ButtonSprite(pygame.sprite.Sprite):
+    def __init__(self, msg, position, width, height, group=None):
+        pygame.sprite.Sprite.__init__(self, group)
+        self.width = width
+        self.height = height
+        self.position = position
+        self.msg = msg
+        self.fontcolor = (200, 30, 10)
+        self.fontsize = 30
+
+        calX = 0
+        calY = 8
+        if len(msg) == 3:
+            calX = 7
+        elif len(msg) == 4:
+            calX = 14
+
+        recSurf = pygame.Surface((1300, 700))
+        recSurf = recSurf.convert_alpha()
+        recSurf.fill((0, 0, 0, 0))  # make transparent
+
+        textSurf = self.writeSomething(self.msg)
+        self.image = textSurf
+        self.rect = textSurf.get_rect()
+        self.rect.centerx = self.position[0] + (self.width / len(msg)) + calX
+        self.rect.centery = self.position[1] + (self.height / 2) - calY
+
+        pygame.draw.rect(recSurf, (170, 170, 170), [self.position[0], self.position[1], self.width, self.height])
+        recSurf.blit(textSurf, (self.rect.centerx, self.rect.centery))
+        self.image = recSurf
+        self.rect = recSurf.get_rect()
+
+    def writeSomething(self, msg=""):
+        myfont = pygame.font.SysFont("None", self.fontsize)
+        mytext = myfont.render(msg, True, self.fontcolor)
+        mytext = mytext.convert_alpha()
+        return mytext
+
+    def update(self, seconds):
+        pass
+
+
+class InputBoxSprite(pygame.sprite.Sprite):
+
+    def __init__(self, position, w, h, group=None):
+        pygame.sprite.Sprite.__init__(self, group)
+        self.INPUT_FONT = pygame.font.Font(None, 32)
+        # self.rect = pygame.Rect(x, y, w, h)
+        self.position = position
+        self.width = w
+        self.height = h
+        self.color = COLOR_INACTIVE
+        self.text = ''
+        self.txt_surface = self.INPUT_FONT.render(self.text, True, self.color)
+        self.active = False
+
+        self.recSurf = pygame.Surface((1300, 700))
+        self.recSurf = self.recSurf.convert_alpha()
+        self.recSurf.fill((0, 0, 0, 0))  # make transparent
+        pygame.draw.rect(self.recSurf, self.color, [self.position[0], self.position[1], self.width, self.height], 2)
+        self.image = self.recSurf
+        self.rect = self.recSurf.get_rect()
+
+    def handle_event(self, event):
+        if event.type == pygame.KEYDOWN:
+            if self.active:
+                if event.key == pygame.K_RETURN:
+                    print(self.text)
+                    self.text = ''
+                elif event.key == pygame.K_BACKSPACE:
+                    self.text = self.text[:-1]
+                else:
+                    self.text += event.unicode
+                # Re-render the text.
+                self.txt_surface = pygame.render(self.text, True, self.color)
+
+    def update(self, seconds):
+        pass
+
+    def textClear(self):
+        self.text = ''
+        self.textProcess()
+
+    def textProcess(self):
+        self.txt_surface = self.INPUT_FONT.render(self.text, True, self.color)
+        self.draw()
+
+    def draw(self):
+        self.recSurf.fill((0, 0, 0, 0))  # make transparent
+        self.recSurf.blit(self.txt_surface, (self.position[0]+5, self.position[1]+5))
+        pygame.draw.rect(self.recSurf, self.color, [self.position[0], self.position[1], self.width, self.height], 2)
+
+
 # ------------------------------------------------------
 # PygameView
-
 class PygameView:
     DECK_POSITION = [750, 50]
+    isButtonsVisible = False
+    inputBox1 = None
+    player_bet_amount = 0
 
     def __init__(self, evManager):
         self.evManager = evManager
         self.evManager.RegisterListener(self)
+        self.isButtonsVisible = False
 
         pygame.init()
         self.window = pygame.display.set_mode((1300, 700))
-        pygame.display.set_caption('Texas Holdem')
+        pygame.display.set_caption('Indian Holdem')
         self.background = pygame.Surface(self.window.get_size())
         self.background.fill((25, 65, 25))
 
@@ -554,16 +671,10 @@ class PygameView:
     def ShowCommunityCards(self, card_list):
         i = 0
         for card in card_list:
-            i += 1
+            i += 2
             newSprite = CardSprite(card, self.DECK_POSITION, (350 + i * 100, 350), COMMUNITY_CARD,
                                    self.communitySprites)
             newSprite = None
-
-    def ShowTurnCard(self, card):
-        newSprite = CardSprite(card, self.DECK_POSITION, (750, 350), COMMUNITY_CARD, self.communitySprites)
-
-    def ShowRiverCard(self, card):
-        newSprite = CardSprite(card, self.DECK_POSITION, (850, 350), COMMUNITY_CARD, self.communitySprites)
 
     def ShowShowDownResult(self, player, community_cards, card_list):
 
@@ -599,6 +710,8 @@ class PygameView:
         newSprite = TextSprite("\"" + player.round_result.result_name + "\"", (550, 360), 50, (200, 40, 200),
                                self.communitySprites)
 
+        self.isButtonsVisible = False
+
     def ShowPreFlopCards(self, players):
 
         POS_LEFT = 0
@@ -607,32 +720,26 @@ class PygameView:
         for player in players:
             player_pos = player.position
             bottomMultiply = -1
+            player_type = ""
 
             if player_pos == 0:
                 POS_LEFT = 235
                 POS_TOP = 160
+                player_type = AI_CARD
             elif player_pos == 1:
-                POS_LEFT = 170
-                POS_TOP = 450
-                bottomMultiply = 1
-            elif player_pos == 2:
-                POS_LEFT = 670
-                POS_TOP = 590
-                bottomMultiply = 1
-            elif player_pos == 3:
                 POS_LEFT = 1200
                 POS_TOP = 450
                 bottomMultiply = 1
-            elif player_pos == 4:
-                POS_LEFT = 1100
-                POS_TOP = 160
+                player_type = PLAYER_CARD
 
             newSprite = CardSprite(player.holecards[0], self.DECK_POSITION,
-                                   (POS_LEFT - 85, POS_TOP + (bottomMultiply) * 30), PLAYER_CARD, self.playerSprites)
-            newSprite = CardSprite(player.holecards[1], self.DECK_POSITION,
-                                   (POS_LEFT + 14, POS_TOP + (bottomMultiply) * 30), PLAYER_CARD, self.playerSprites)
+                                   (POS_LEFT - 15, POS_TOP + (bottomMultiply) * 30), player_type, self.playerSprites)
             newSprite = TextSprite(player.name, (POS_LEFT - 20, POS_TOP - (bottomMultiply) * 40), 30, (150, 150, 150),
                                    self.playerSprites)
+            newSprite = ButtonSprite("BET", (800, 450), 150, 40, self.communitySprites)
+            newSprite = ButtonSprite("CALL", (800, 510), 150, 40, self.communitySprites)
+            newSprite = ButtonSprite("FOLD", (800, 570), 150, 40, self.communitySprites)
+            self.isButtonsVisible = True
 
     def InitializeFrontSprites(self):
         for cardSprite in self.communitySprites:
@@ -650,11 +757,38 @@ class PygameView:
     def ShowTable(self):
         newSprite = TableSprite(self.backSprites)
 
+    def ShowInputBox(self):  # 베팅 금액 input box show
+        self.inputBox1 = InputBoxSprite((600, 450), 140, 32, self.communitySprites)
+
+    def InputBettingAmount(self, value):
+        if self.inputBox1.active:
+            self.inputBox1.text += str(value)
+            self.inputBox1.textProcess()
+
+    def InputBackspace(self):
+        if self.inputBox1.active:
+            self.inputBox1.text = self.inputBox1.text[:-1]
+            self.inputBox1.textProcess()
+
+    def DecideBettingAmount(self):
+        if self.inputBox1.active and len(self.inputBox1.text) > 0:
+            return self.inputBox1.text
+        else:
+            return ''
+
+    # 베팅 금액 InputBox 활성화/비활성화 event
+    def ClickInputBox(self, mouse):
+        if self.isButtonsVisible:
+            if self.inputBox1:
+                if self.inputBox1.rect.collidepoint(mouse):
+                    self.inputBox1.active = not self.inputBox1.active
+                else:
+                    self.inputBox1.active = False
+                self.inputBox1.color = COLOR_ACTIVE if self.inputBox1.active else COLOR_INACTIVE
+                self.inputBox1.draw()
+
     def ShowInitGame(self):
         pass
-        # self.background = pygame.Surface(self.window.get_size())
-        # self.background.fill((25, 65, 25))
-        # self.window.blit(self.background, (0, 0))
 
     # ----------------------------------------------------------------------
     def Notify(self, event):
@@ -681,17 +815,46 @@ class PygameView:
             # self.ShowInitGame()
             self.ShowTable()
 
+        # 베팅 금액 입력 후 엔터 눌렀을 때.
+        if isinstance(event, BetChipEvent):
+            value = self.DecideBettingAmount()
+            if value != '':
+                self.player_bet_amount = int(value)
+                self.inputBox1.textClear()
+                print(value)
+            self.evManager.Post(EnterTest())  # ward # to do 여기서 Game 클래스로 입력값을 보낸다.
+
+        # 백스페이스 입력 이벤트
+        if isinstance(event, BackSpaceEvent):
+            self.InputBackspace()
+
+        # 숫자 입력 이벤트
+        if isinstance(event, InputNumbers):
+            self.InputBettingAmount(event.value)
+
+        # "BET" 버튼 클릭 이벤트.
+        if isinstance(event, ClickBetButton):
+            if self.isButtonsVisible:  # 버튼이 보이는 상태일때만 작동.
+                self.ShowInputBox()
+
+        # "Call" 버튼 클릭 이벤트.
+        if isinstance(event, ClickCallButton):
+            print("Call button")
+
+        # "Fold" 버튼 클릭 이벤트.
+        if isinstance(event, ClickFoldButton):
+            print("Fold button")
+
+        # InputBox 클릭(=>활성화/비활성화) 이벤트.
+        if isinstance(event, ClickInputBox):
+            if self.isButtonsVisible:
+                self.ClickInputBox(event.mouse)
+
         if isinstance(event, PreFlopEvent):
             self.ShowPreFlopCards(event.players)
 
         if isinstance(event, FlopEvent):
             self.ShowCommunityCards(event.card_list)
-
-        if isinstance(event, TurnEvent):
-            self.ShowTurnCard(event.card)
-
-        if isinstance(event, RiverEvent):
-            self.ShowRiverCard(event.card)
 
         if isinstance(event, ShowDownEvent):
             self.ShowShowDownResult(event.player, event.community_cards, event.card_list)

@@ -1,179 +1,11 @@
 import pygame
+import random
 from pygame.locals import *
 from Events import *
-from CardCommon import *
+import Cards
 
-
-PLAYER_CARD = 'player_card'
-COMMUNITY_CARD = 'community_card'
-
-
-class Game:
-    """..."""
-    STATE_INITIAL = 'initial'
-    STATE_PREPARING = 'preparing'
-    STATE_PREFLOP = 'preflop'
-    STATE_FLOP = 'flop'
-    STATE_TURN = 'turn'
-    STATE_RIVER = 'river'
-    STATE_SHOWDOWN = 'showdown'
-
-    def __init__(self, evManager):
-        self.game_deck = Deck()
-        self.players = []
-        self.community_cards = []
-
-        self.evManager = evManager
-        self.evManager.RegisterListener(self)
-
-        self.state = Game.STATE_INITIAL
-
-    # Event Notify
-    def Notify(self, event):
-        if isinstance(event, GameStartRequest):
-            if self.state == Game.STATE_INITIAL:
-                self.Start()
-
-        if isinstance(event, NextTurnEvent):
-            if self.state == Game.STATE_PREPARING:
-                self.deal_preflop()
-            elif self.state == Game.STATE_PREFLOP:
-                self.deal_flop()
-            elif self.state == Game.STATE_FLOP:
-                self.deal_turn()
-            elif self.state == Game.STATE_TURN:
-                self.deal_river()
-            elif self.state == Game.STATE_RIVER:
-                self.show_down()
-            elif self.state == Game.STATE_SHOWDOWN:
-                self.InitializeRound()
-
-    def Start(self):
-        print('-------------------------------------------------------')
-        print('Initialize Game: ')
-        self.community_cards = []
-        self.InitializePlayers()
-        self.InitializePot()
-        self.InitializeRound()
-        print('InitializeRound')
-
-    def InitializeRound(self):
-        self.state = Game.STATE_PREPARING
-        # Initialize Round
-        self.game_deck.InitializeDeck()
-        self.game_deck.ShuffleDeck()
-        # self.game_deck.PrintCurrentDeck()
-        self.community_cards = []
-
-        self.InitializePot()
-
-        # Initialize Players's holecards
-        for player in self.players:
-            player.init_holecards()
-
-        self.evManager.Post(InitializeRoundEvent())
-
-    def InitializePlayers(self):
-        self.players = []
-        self.players.append(Player('Patrick', 0))
-        self.players.append(Player('Gorge', 1))
-        self.players.append(Player('Chen', 2))
-        self.players.append(Player('Jason', 3))
-        self.players.append(Player('Marie', 4))
-
-    def InitializePot(self):
-        self.pot = Pot()
-
-    # pre-flop: 플레이어들에게 카드를 2장씩 나눠준다.
-    def deal_preflop(self):
-        self.state = Game.STATE_PREFLOP
-        print('-------------------------------------------------------')
-        print('Pre-Flop Stage: Deal 2 Hold Cards for each players')
-        player_count = len(self.players)
-
-        # allocate card to players (2 per each)
-        for i in range(player_count * 2):
-            self.players[i % player_count].add_cards(self.game_deck.Pop_card())
-
-        self.evManager.Post(PreFlopEvent(self.players))
-        self.PrintCards()
-
-    # flop : 커뮤니티 카드 3장을 깔아준다.
-    def deal_flop(self):
-        self.state = Game.STATE_FLOP
-        print('-------------------------------------------------------')
-        print('Flop Stage: Deal 3 Community Cards')
-        for i in range(3):
-            self.community_cards.append(self.game_deck.Pop_card())
-
-        self.evManager.Post(FlopEvent(self.community_cards))
-        self.PrintCards()
-
-    # turn : 커뮤니티 카드 1장을 깔아준다.
-    def deal_turn(self):
-        self.state = Game.STATE_TURN
-        print('-------------------------------------------------------')
-        print('Turn Stage: Deal 1 Community Card')
-        new_community_card = self.game_deck.Pop_card()
-        self.community_cards.append(new_community_card)
-
-        self.evManager.Post(TurnEvent(new_community_card))
-        self.PrintCards()
-
-    # river : 커뮤니티 카드 1장을 깔아준다.
-    def deal_river(self):
-        self.state = Game.STATE_RIVER
-        print('-------------------------------------------------------')
-        print('River Stage: Deal 1 Community Card')
-        new_community_card = self.game_deck.Pop_card()
-        self.community_cards.append(new_community_card)
-
-        self.evManager.Post(RiverEvent(new_community_card))
-
-        self.PrintCards()
-
-    # show_down : 승자를 확인한다.
-    def show_down(self):
-        self.state = Game.STATE_SHOWDOWN
-        print('-------------------------------------------------------')
-        print('ShowDown Stage: Check BestCards and Choose Winner')
-        for player in self.players:
-            print('Player ' + str(player.position) + ': \n')
-            player.choice_best_cards(self.community_cards)
-            PokerHelper.PrintCards(player.round_result.hands)
-
-        winner = self.GetWinner()
-        self.evManager.Post(ShowDownEvent(winner, self.community_cards, winner.round_result.hands))
-
-    def GetWinner(self):
-        players = self.players
-        sorted_player = sorted(players, key=PokerHelper.cmp_to_key(PokerHelper.CompareTwoPlayerHands), reverse=True)
-
-        print('--------------------- sorted players ---------------------')
-        for player in sorted_player:
-            print(player.name)
-            print(player.round_result)
-
-        winner = sorted_player[0]
-
-        print('\nWinner => ' + winner.name + ', P' + str(winner.position))
-        print(winner.round_result)
-
-        return winner
-
-    def pot_to_winner(self):
-        pass
-
-    def PrintCards(self):
-        # print hole cards
-        print('Hole Cards:')
-        for player in self.players:
-            for card in player.holecards:
-                print('player: ', player.name, card)
-
-        print('Community Cards:')
-        for card in self.community_cards:
-            print(card)
+CARD = 'card'
+CHIP = 'chip'
 
 
 class EventManager:
@@ -320,7 +152,7 @@ class CardSprite(pygame.sprite.Sprite):
     def update(self, seconds):
         # updated position over the destination pos
         # calibrate the final pos not over the dest_pos
-        if (self.type == PLAYER_CARD or self.type == COMMUNITY_CARD):
+        if self.type == CARD:
             if self.dest_pos[0] - self.src_pos[0] < 0 \
                     and self.dest_pos[0] <= self.pos[0]:
                 self.pos[0] += self.GetDelX(self.SPEED, seconds)
@@ -352,34 +184,10 @@ class CardSprite(pygame.sprite.Sprite):
         return (-1.0) * (self.src_pos[1] - self.dest_pos[1]) / seconds / speed
 
     def GetCardImageName(self, card):
-        suit = card.GetSuit()
-        rank = card.GetRank()
-
-        suit_str = ''
-        rank_str = ''
-
-        if suit == 0:
-            suit_str = 'spades'
-        elif suit == 1:
-            suit_str = 'diamonds'
-        elif suit == 2:
-            suit_str = 'hearts'
-        elif suit == 3:
-            suit_str = 'clubs'
-
-        if rank == 0:
-            rank_str = 'ace'
-        elif rank > 0 and rank < 10:
-            rank_str = str(rank + 1)
-        elif rank == 10:
-            rank_str = 'jack'
-        elif rank == 11:
-            rank_str = 'queen'
-        elif rank == 12:
-            rank_str = 'king'
-
-        tmp_str = 'assets/' + rank_str + '_' + suit_str + '.png'
-        return tmp_str
+        if self.type == CARD:
+            return 'asset/' + card.value + '.png'
+        else:
+            return 'asset/Chip.png'
 
 
 class TableSprite(pygame.sprite.Sprite):
@@ -441,7 +249,7 @@ class TextSprite(pygame.sprite.Sprite):
 
     def newcolor(self):
         # any colour but black or white
-        return (random.randint(10, 250), random.randint(10, 250), random.randint(10, 250))
+        return random.randint(10, 250), random.randint(10, 250), random.randint(10, 250)
 
     def update(self, seconds):
         textSurf = self.writeSomething(self.text)
@@ -492,8 +300,6 @@ class TextSprite(pygame.sprite.Sprite):
                 del_f_size = 0.1 * self.fontsize
 
             self.fontsize += int(del_f_size)
-
-
         else:
             self.ChangeMakeBigger()
 
@@ -555,84 +361,12 @@ class PygameView:
         i = 0
         for card in card_list:
             i += 1
-            newSprite = CardSprite(card, self.DECK_POSITION, (350 + i * 100, 350), COMMUNITY_CARD,
+            newSprite = CardSprite(card, self.DECK_POSITION, (350 + i * 100, 350), CARD,
                                    self.communitySprites)
             newSprite = None
 
     def ShowTurnCard(self, card):
-        newSprite = CardSprite(card, self.DECK_POSITION, (750, 350), COMMUNITY_CARD, self.communitySprites)
-
-    def ShowRiverCard(self, card):
-        newSprite = CardSprite(card, self.DECK_POSITION, (850, 350), COMMUNITY_CARD, self.communitySprites)
-
-    def ShowShowDownResult(self, player, community_cards, card_list):
-
-        for aSprite in self.playerSprites:
-            if isinstance(aSprite, TextSprite):
-                if aSprite.text == player.name:
-                    aSprite.ChangeMakeBigger()
-
-        # Remove previouse community fileds
-        for cardSprite in self.communitySprites:
-            cardSprite.kill()
-
-        # Redraw Comminity Card with small size above Winner Announcing
-        newSprite = RectSprite((400, 140), 500, 120, self.communitySprites)
-        newSprite = None
-
-        i = 0
-        for card in community_cards:
-            i += 1
-            newSprite = CardSprite(card, self.DECK_POSITION, (350 + i * 100, 200), COMMUNITY_CARD,
-                                   self.communitySprites)
-            newSprite = None
-
-        i = 0
-        for card in card_list:
-            i += 1
-            newSprite = CardSprite(card, self.DECK_POSITION, (350 + i * 100, 450), COMMUNITY_CARD,
-                                   self.communitySprites)
-            newSprite = None
-
-        newSprite = TextSprite("The Winner is " + player.name, (550, 300), 60, (200, 30, 10), self.communitySprites)
-        newSprite = None
-        newSprite = TextSprite("\"" + player.round_result.result_name + "\"", (550, 360), 50, (200, 40, 200),
-                               self.communitySprites)
-
-    def ShowPreFlopCards(self, players):
-
-        POS_LEFT = 0
-        POS_TOP = 0
-
-        for player in players:
-            player_pos = player.position
-            bottomMultiply = -1
-
-            if player_pos == 0:
-                POS_LEFT = 235
-                POS_TOP = 160
-            elif player_pos == 1:
-                POS_LEFT = 170
-                POS_TOP = 450
-                bottomMultiply = 1
-            elif player_pos == 2:
-                POS_LEFT = 670
-                POS_TOP = 590
-                bottomMultiply = 1
-            elif player_pos == 3:
-                POS_LEFT = 1200
-                POS_TOP = 450
-                bottomMultiply = 1
-            elif player_pos == 4:
-                POS_LEFT = 1100
-                POS_TOP = 160
-
-            newSprite = CardSprite(player.holecards[0], self.DECK_POSITION,
-                                   (POS_LEFT - 85, POS_TOP + (bottomMultiply) * 30), PLAYER_CARD, self.playerSprites)
-            newSprite = CardSprite(player.holecards[1], self.DECK_POSITION,
-                                   (POS_LEFT + 14, POS_TOP + (bottomMultiply) * 30), PLAYER_CARD, self.playerSprites)
-            newSprite = TextSprite(player.name, (POS_LEFT - 20, POS_TOP - (bottomMultiply) * 40), 30, (150, 150, 150),
-                                   self.playerSprites)
+        newSprite = CardSprite(card, self.DECK_POSITION, (750, 350), CARD, self.communitySprites)
 
     def InitializeFrontSprites(self):
         for cardSprite in self.communitySprites:
@@ -678,43 +412,26 @@ class PygameView:
             pygame.display.update(dirtyRects)
 
         if isinstance(event, GameStartRequest):
-            # self.ShowInitGame()
+            self.ShowInitGame()
             self.ShowTable()
 
-        if isinstance(event, PreFlopEvent):
-            self.ShowPreFlopCards(event.players)
-
-        if isinstance(event, FlopEvent):
+        # if isinstance(event, PreFlopEvent):
+        #     self.ShowPreFlopCards(event.players)
+        #
+        if isinstance(event, NextTurnEvent):
             self.ShowCommunityCards(event.card_list)
-
-        if isinstance(event, TurnEvent):
-            self.ShowTurnCard(event.card)
-
-        if isinstance(event, RiverEvent):
-            self.ShowRiverCard(event.card)
-
-        if isinstance(event, ShowDownEvent):
-            self.ShowShowDownResult(event.player, event.community_cards, event.card_list)
+        #
+        # if isinstance(event, TurnEvent):
+        #     self.ShowTurnCard(event.card)
+        #
+        # if isinstance(event, RiverEvent):
+        #     self.ShowRiverCard(event.card)
+        #
+        # if isinstance(event, ShowDownEvent):
+        #     self.ShowShowDownResult(event.player, event.community_cards, event.card_list)
 
         if isinstance(event, InitializeRoundEvent):
             self.InitializeFrontSprites()
 
 
 # ------------------------------------------------------
-def main():
-    evManager = EventManager()
-
-    keybd = KeyboardController(evManager)
-    spinner = CPUSpinnerController(evManager)
-    pygameView = PygameView(evManager)
-
-    texas_holdem = Game(evManager)
-
-    spinner.Run()
-
-
-if __name__ == "__main__":
-    main()
-
-
-
