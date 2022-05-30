@@ -17,9 +17,51 @@ class GameStartRequest(Event):
         self.name = "Game Start Request"
 
 
-class ButtonEvent(Event):
+class MouseClickEvent(Event):
     def __init__(self):
         self.name = "Mouse Button Click Event"
+
+
+class ClickBetButton(Event):
+    def __init__(self):
+        self.name = "Bet Button Click Event"
+
+
+class ClickFoldButton(Event):
+    def __init__(self):
+        self.name = "Fold Button Click Event"
+
+
+class ClickCallButton(Event):
+    def __init__(self):
+        self.name = "Call Button Click Event"
+
+
+class ClickInputBox(Event):
+    def __init__(self, mouse):
+        self.name = "Input Box Click Event"
+        self.mouse = mouse
+
+
+class BetChipEvent(Event):
+    def __init__(self):
+        self.name = "Decide how much to bet"
+
+
+class EnterTest(Event):  # Testing ward
+    def __init__(self):
+        self.name = "Enter Test"
+
+
+class BackSpaceEvent(Event):
+    def __init__(self):
+        self.name = "input Backspace key"
+
+
+class InputNumbers(Event):
+    def __init__(self, value):
+        self.name = "input betting amount"
+        self.value = value - 48
 
 
 class TickEvent(Event):

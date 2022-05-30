@@ -7,6 +7,8 @@ from CardCommon import *
 PLAYER_CARD = 'player_card'
 COMMUNITY_CARD = 'community_card'
 AI_CARD = 'ai_card'
+COLOR_INACTIVE = pygame.Color('lightskyblue3')
+COLOR_ACTIVE = pygame.Color('dodgerblue2')
 
 
 class Game:
@@ -46,6 +48,38 @@ class Game:
             elif self.state == Game.STATE_SHOWDOWN:
                 self.InitializeRound()
 
+        if isinstance(event, EnterTest):
+            print("Enter is working")
+
+        if isinstance(event, MouseClickEvent):
+            mouse = pygame.mouse.get_pos()
+
+            btnWidth = 150
+            btnHeight = 40
+            inputWidth = 140
+
+            btnX = 800
+            btnBetY = 450
+            btnCallY = 510
+            btnFoldY = 570
+
+            inputX = 600
+
+            if mouse[0] in range(btnX, btnX + btnWidth):
+                if mouse[1] in range(btnBetY, btnBetY + btnHeight):
+                    # BET button click
+                    self.ClickBetButton()
+                elif mouse[1] in range(btnCallY, btnCallY + btnHeight):
+                    # CALL button click
+                    self.ClickCallButton()
+                elif mouse[1] in range(btnFoldY, btnFoldY + btnHeight):
+                    # FOLD button click
+                    self.ClickFoldButton()
+            elif mouse[0] in range(inputX, inputX + inputWidth):  # 베팅 금액 input box
+                self.ClickInputBox(mouse)
+            # 여기서 베팅 금액 합산해주기.
+            # to-do : 코인 개수 표시해주기.
+
     def Start(self):
         print('-------------------------------------------------------')
         print('Initialize Game: ')
@@ -78,6 +112,18 @@ class Game:
 
     def InitializePot(self):
         self.pot = Pot()
+
+    def ClickBetButton(self):
+        self.evManager.Post(ClickBetButton())
+
+    def ClickCallButton(self):
+        self.evManager.Post(ClickCallButton())
+
+    def ClickFoldButton(self):
+        self.evManager.Post(ClickFoldButton())
+
+    def ClickInputBox(self, mouse):
+        self.evManager.Post(ClickInputBox(mouse))
 
     # pre-flop: 플레이어들에게 카드를 1장씩 나눠준다.
     def deal_preflop(self):
@@ -282,7 +328,14 @@ class KeyboardController:
                         and event.key == K_SPACE:
                     ev = GameStartRequest()
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    ev = ButtonEvent()
+                    ev = MouseClickEvent()
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+                    ev = BetChipEvent()  # 베팅 금액 합산 로직 to do
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_BACKSPACE:
+                    ev = BackSpaceEvent()
+                elif event.type == pygame.KEYDOWN \
+                        and event.key in range(K_0, K_9+1):
+                    ev = InputNumbers(event.key)
 
                 if ev:
                     self.evManager.Post(ev)
@@ -526,12 +579,64 @@ class ButtonSprite(pygame.sprite.Sprite):
         pass
 
 
+class InputBoxSprite(pygame.sprite.Sprite):
+
+    def __init__(self, position, w, h, group=None):
+        pygame.sprite.Sprite.__init__(self, group)
+        self.INPUT_FONT = pygame.font.Font(None, 32)
+        # self.rect = pygame.Rect(x, y, w, h)
+        self.position = position
+        self.width = w
+        self.height = h
+        self.color = COLOR_INACTIVE
+        self.text = ''
+        self.txt_surface = self.INPUT_FONT.render(self.text, True, self.color)
+        self.active = False
+
+        self.recSurf = pygame.Surface((1300, 700))
+        self.recSurf = self.recSurf.convert_alpha()
+        self.recSurf.fill((0, 0, 0, 0))  # make transparent
+        pygame.draw.rect(self.recSurf, self.color, [self.position[0], self.position[1], self.width, self.height], 2)
+        self.image = self.recSurf
+        self.rect = self.recSurf.get_rect()
+
+    def handle_event(self, event):
+        if event.type == pygame.KEYDOWN:
+            if self.active:
+                if event.key == pygame.K_RETURN:
+                    print(self.text)
+                    self.text = ''
+                elif event.key == pygame.K_BACKSPACE:
+                    self.text = self.text[:-1]
+                else:
+                    self.text += event.unicode
+                # Re-render the text.
+                self.txt_surface = pygame.render(self.text, True, self.color)
+
+    def update(self, seconds):
+        pass
+
+    def textClear(self):
+        self.text = ''
+        self.textProcess()
+
+    def textProcess(self):
+        self.txt_surface = self.INPUT_FONT.render(self.text, True, self.color)
+        self.draw()
+
+    def draw(self):
+        self.recSurf.fill((0, 0, 0, 0))  # make transparent
+        self.recSurf.blit(self.txt_surface, (self.position[0]+5, self.position[1]+5))
+        pygame.draw.rect(self.recSurf, self.color, [self.position[0], self.position[1], self.width, self.height], 2)
+
+
 # ------------------------------------------------------
 # PygameView
-
 class PygameView:
     DECK_POSITION = [750, 50]
     isButtonsVisible = False
+    inputBox1 = None
+    player_bet_amount = 0
 
     def __init__(self, evManager):
         self.evManager = evManager
@@ -652,31 +757,38 @@ class PygameView:
     def ShowTable(self):
         newSprite = TableSprite(self.backSprites)
 
-    def DealButtonClick(self):
+    def ShowInputBox(self):  # 베팅 금액 input box show
+        self.inputBox1 = InputBoxSprite((600, 450), 140, 32, self.communitySprites)
+
+    def InputBettingAmount(self, value):
+        if self.inputBox1.active:
+            self.inputBox1.text += str(value)
+            self.inputBox1.textProcess()
+
+    def InputBackspace(self):
+        if self.inputBox1.active:
+            self.inputBox1.text = self.inputBox1.text[:-1]
+            self.inputBox1.textProcess()
+
+    def DecideBettingAmount(self):
+        if self.inputBox1.active and len(self.inputBox1.text) > 0:
+            return self.inputBox1.text
+        else:
+            return ''
+
+    # 베팅 금액 InputBox 활성화/비활성화 event
+    def ClickInputBox(self, mouse):
         if self.isButtonsVisible:
-            mouse = pygame.mouse.get_pos()
-
-            btnWidth = 150
-            btnHeight = 40
-
-            btnX = 800
-            btnBetY = 450
-            btnCallY = 510
-            btnFoldY = 570
-
-            if mouse[0] in range(btnX, btnX + btnWidth):
-                if mouse[1] in range(btnBetY, btnBetY + btnHeight):
-                    print("BET")
-                elif mouse[1] in range(btnCallY, btnCallY + btnHeight):
-                    print("CALL")
-                elif mouse[1] in range(btnFoldY, btnFoldY + btnHeight):
-                    print("FOLD")
+            if self.inputBox1:
+                if self.inputBox1.rect.collidepoint(mouse):
+                    self.inputBox1.active = not self.inputBox1.active
+                else:
+                    self.inputBox1.active = False
+                self.inputBox1.color = COLOR_ACTIVE if self.inputBox1.active else COLOR_INACTIVE
+                self.inputBox1.draw()
 
     def ShowInitGame(self):
         pass
-        # self.background = pygame.Surface(self.window.get_size())
-        # self.background.fill((25, 65, 25))
-        # self.window.blit(self.background, (0, 0))
 
     # ----------------------------------------------------------------------
     def Notify(self, event):
@@ -703,9 +815,40 @@ class PygameView:
             # self.ShowInitGame()
             self.ShowTable()
 
-        if isinstance(event, ButtonEvent):
-            # self.ShowTable()
-            self.DealButtonClick()
+        # 베팅 금액 입력 후 엔터 눌렀을 때.
+        if isinstance(event, BetChipEvent):
+            value = self.DecideBettingAmount()
+            if value != '':
+                self.player_bet_amount = int(value)
+                self.inputBox1.textClear()
+                print(value)
+            self.evManager.Post(EnterTest())  # ward # to do 여기서 Game 클래스로 입력값을 보낸다.
+
+        # 백스페이스 입력 이벤트
+        if isinstance(event, BackSpaceEvent):
+            self.InputBackspace()
+
+        # 숫자 입력 이벤트
+        if isinstance(event, InputNumbers):
+            self.InputBettingAmount(event.value)
+
+        # "BET" 버튼 클릭 이벤트.
+        if isinstance(event, ClickBetButton):
+            if self.isButtonsVisible:  # 버튼이 보이는 상태일때만 작동.
+                self.ShowInputBox()
+
+        # "Call" 버튼 클릭 이벤트.
+        if isinstance(event, ClickCallButton):
+            print("Call button")
+
+        # "Fold" 버튼 클릭 이벤트.
+        if isinstance(event, ClickFoldButton):
+            print("Fold button")
+
+        # InputBox 클릭(=>활성화/비활성화) 이벤트.
+        if isinstance(event, ClickInputBox):
+            if self.isButtonsVisible:
+                self.ClickInputBox(event.mouse)
 
         if isinstance(event, PreFlopEvent):
             self.ShowPreFlopCards(event.players)
