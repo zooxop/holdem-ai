@@ -48,8 +48,9 @@ class Game:
             elif self.state == Game.STATE_SHOWDOWN:
                 self.InitializeRound()
 
-        if isinstance(event, EnterTest):
-            print("Enter is working")
+        # 여기서 엔터키로 입력한 amount 값을 받아오고, 처리한다.
+        if isinstance(event, BetAmountKeyPress):
+            print("Here is Game Class", event.amount)
 
         if isinstance(event, MouseClickEvent):
             mouse = pygame.mouse.get_pos()
@@ -330,7 +331,7 @@ class KeyboardController:
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     ev = MouseClickEvent()
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
-                    ev = BetChipEvent()  # 베팅 금액 합산 로직 to do
+                    ev = ReturnKeyPress()  # 베팅 금액 합산 로직 to do
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_BACKSPACE:
                     ev = BackSpaceEvent()
                 elif event.type == pygame.KEYDOWN \
@@ -816,13 +817,13 @@ class PygameView:
             self.ShowTable()
 
         # 베팅 금액 입력 후 엔터 눌렀을 때.
-        if isinstance(event, BetChipEvent):
-            value = self.DecideBettingAmount()
-            if value != '':
-                self.player_bet_amount = int(value)
+        if isinstance(event, ReturnKeyPress):
+            amount = self.DecideBettingAmount()
+            if amount != '':
+                self.player_bet_amount = int(amount)
                 self.inputBox1.textClear()
-                print(value)
-            self.evManager.Post(EnterTest())  # ward # to do 여기서 Game 클래스로 입력값을 보낸다.
+                print("amount :", amount)
+            self.evManager.Post(BetAmountKeyPress(amount))  # 여기서 Game 클래스로 입력값을 보낸다.
 
         # 백스페이스 입력 이벤트
         if isinstance(event, BackSpaceEvent):

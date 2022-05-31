@@ -43,14 +43,15 @@ class ClickInputBox(Event):
         self.mouse = mouse
 
 
-class BetChipEvent(Event):
+class ReturnKeyPress(Event):
     def __init__(self):
-        self.name = "Decide how much to bet"
+        self.name = "Return-key press Event"
 
 
-class EnterTest(Event):  # Testing ward
-    def __init__(self):
-        self.name = "Enter Test"
+class BetAmountKeyPress(Event):  # Betting 금액 결정 Return key
+    def __init__(self, amount):
+        self.name = "Press Return key for Betting chip"
+        self.amount = amount
 
 
 class BackSpaceEvent(Event):
