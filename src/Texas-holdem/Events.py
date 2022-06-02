@@ -103,3 +103,8 @@ class ShowDownEvent(Event):
 class InitializeRoundEvent(Event):
     def __init__(self):
         self.name = "Initialize Round"
+
+
+class NextRoundEvent(Event):
+    def __init__(self):
+        self.name = "Next Round Event"
