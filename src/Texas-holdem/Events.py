@@ -81,9 +81,10 @@ class NextTurnEvent(Event):
 
 
 class PreFlopEvent(Event):
-    def __init__(self, players):
+    def __init__(self, players, pot):
         self.name = "Pre-Flop Event"
         self.players = players
+        self.pot = pot
 
 
 class FlopEvent(Event):
@@ -106,5 +107,12 @@ class InitializeRoundEvent(Event):
 
 
 class NextRoundEvent(Event):
-    def __init__(self):
+    def __init__(self, players, pot):
         self.name = "Next Round Event"
+        self.players = players
+        self.pot = pot
+
+
+class DealPreFlops(Event):
+    def __init__(self):
+        self.name = "PreFlops event only"
