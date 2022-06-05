@@ -7,6 +7,7 @@ from Cards import *
 from tkinter import *
 import random
 from dataclasses import dataclass
+import h5py
 
 '''
 Indian Holdem
@@ -64,8 +65,8 @@ class Player:
         self.top = -1
         self.betMoney = 0
 
-    def SetCombineTop(self):
-        hand_temp = self.hand
+    def GetCombine(self):
+        hand_temp = copy.copy(self.hand)
         hand_temp.sort()
         if hand_temp[0] == hand_temp[1] == hand_temp[2]:
             self.combine = Combination.TRIPLE
@@ -94,8 +95,8 @@ class Player:
         print("public:{}, {}".format(Cards.Card(self.hand[0]), Cards.Card(self.hand[1])))
         print("opponent:{}".format(Cards.Card(self.hand[2])))
 
-    def Win(self):
-        self.chip += self.betMoney * 2
+    def Win(self, oppoMoney):
+        self.chip += self.betMoney + oppoMoney
         self.betMoney = 0
 
     def Defeat(self):
@@ -112,18 +113,21 @@ class HoldemMaster():
         self.rateDraw : float = 0.0
         self.rateLose : float = 0.0
         self.rateStraight : float = 0.0
-        self.myCharacter = Player(10)
-        self.opponent = Player(10)
+        self.myCharacter : Player = Player(10)
+        self.opponent : Player = Player(10)
         self.turn = 0
-        self.result = -1
+        #self.limitBet = 0
+        self.result = 0
+        #self.model
 
     def SetOpponent(self, p : Player):
+        if(len(self.deck) == 0):
+            self.deck = StandardDeck()
         self.opponent = copy.copy(p)
         self.myCharacter.hand = copy.copy(p.hand)
         self.myCharacter.hand[2] = -1
         for i in range(3):
-            c = Cards.Card(self.opponent.hand[i])
-            self.deck.remove(c)
+            self.deck.DeleteCard(self.opponent.hand[i])
 
     def UpdateOpponent(self, oppo : Player):
         self.opponent.chip = oppo.chip
@@ -133,32 +137,56 @@ class HoldemMaster():
         self.myCharacter.chip = me.chip
         self.myCharacter.betMoney = me.betMoney
 
+    def UpdatePlayers(self, me : Player, oppo : Player):
+        self.opponent.chip = oppo.chip
+        self.opponent.betMoney = oppo.betMoney
+        self.myCharacter.chip = me.chip
+        self.myCharacter.betMoney = me.betMoney
+
+        #self.limitBet = oppo.chip * self.rateWin
+
+    def GetMatch(self):
+        self.myCharacter.GetCombine()
+        self.opponent.GetCombine()
+        if (self.myCharacter.combine == self.opponent.combine):
+            if (self.myCharacter.top == self.opponent.top):
+                return 0
+            elif (self.myCharacter.top > self.opponent.top):
+                return -1
+            elif (self.myCharacter.top < self.opponent.top):
+                return 1
+        elif (self.myCharacter.combine.value > self.opponent.combine.value):
+            return -1
+        elif (self.myCharacter.combine.value < self.opponent.combine.value):
+            return 1
+
     def GetRate(self):
         win : int = 0
         draw : int = 0
         lose : int = 0
+        straight : int = 0
 
-        for i in self.deck:
+        for i in range(0, len(self.deck)):
             self.myCharacter.hand[2] = self.deck[i].value
-            result : int = GameLogic.GetMatch(self.myCharacter, self.opponent)
+            result : int = self.GetMatch()
+            if(self.myCharacter.combine.value >= Combination.STRAIGHT.value):
+                straight += 1
             if(result == -1):
                 win += 1
             elif(result == 0):
                 draw += 1
             elif(result == 1):
                 lose += 1
-
         total = len(self.deck)
 
         self.rateWin = win / total
         self.rateDraw = draw / total
         self.rateLose = lose / total
-
-    #def ChooseBetMode(self):
+        self.rateStraight = straight / total
 
     def BetAlogorithm(self) -> BetInfo:
-        myBet: BetInfo
-        if(self.rateWin > 0.7):
+        myBet = BetInfo()
+        if(self.rateWin > 0.6):
             maxBet = 0
             if(self.opponent.chip >= self.myCharacter.chip):
                 maxBet = self.myCharacter.chip
@@ -166,10 +194,15 @@ class HoldemMaster():
                 maxBet = self.opponent.chip
 
             maxBet = int(maxBet * self.rateWin)
-
+            if(maxBet <= 0):
+                myBet.betType = 2
+                myBet.betValue = 0
+            baseBet = self.opponent.betMoney - self.myCharacter.betMoney
             myBet.betType = 1
-            myBet.betValue = random.randrange(1, maxBet + 1)
+            myBet.betValue = random.randrange(baseBet, maxBet + 1)
             self.turn += 1
+
+            print("Bet:", myBet.betValue)
 
             return myBet
         elif(self.rateWin > 0.5):
@@ -177,12 +210,16 @@ class HoldemMaster():
             myBet.betValue = 0
             self.turn += 1
 
+            print("call")
+
             return myBet
         else:
-            if(self.rateUpStraight >= 0.15):
+            if(self.rateStraight >= 0.4):
                 myBet.betType = 2
                 myBet.betValue = 0
                 self.turn += 1
+
+                print("call")
 
                 return myBet
             else:
@@ -190,10 +227,13 @@ class HoldemMaster():
                 myBet.betValue = 0
                 self.turn += 1
 
+                print("fold")
+
                 return myBet
 
-    def SetResult(self, res : int):
+    def SetResult(self, res : int, p1 : Player):
         self.result = res
+        self.deck.DeleteCard(copy.copy(p1.hand[2]))
         self.turn = 0
 
 
@@ -279,40 +319,12 @@ class GameLogic:
         #Player2의 배팅 페이즈
         elif(num == 2):
             print("Player2's turn")
-            #self.master.UpdateOpponent(self.player1)
-            #self.master.UpdateMe(self.player2)
+            self.master.UpdatePlayers(copy.copy(self.player2), copy.copy(self.player1))
             self.player1.PrintCards()
 
-            print("1. Bet\n2. call\n3. fold")
-            x = int(input("선택:"))
-
-            if (x == 1):
-                while (1):
-                    coin = int(input("베팅: "))
-                    if (coin > self.player2.chip or coin > self.player1.chip):
-                        print("다시 입력")
-                    else:
-                        self.player2.BetChip(coin)
-                        break
-
-                return True
-            elif (x == 2):
-                temp = self.player1.betMoney - self.player2.betMoney
-                self.player2.BetChip(temp)
-
-                return True
-
-            elif (x == 3):
-                self.player2.GetCombine()
-                if (self.player2.combine.value >= Combination.STRAIGHT.value):
-                    self.player2.BetChip(10)
-
-                return False
-            """
-            myBet : BetInfo =  self.master.BetAlogorithm()
+            myBet : BetInfo = self.master.BetAlogorithm()
 
             if (myBet.betType == 1):
-
                 self.player2.BetChip(myBet.betValue)
 
                 return True
@@ -327,7 +339,7 @@ class GameLogic:
                     self.player2.BetChip(10)
 
                 return False
-            """
+
     def RoundProcess(self) -> bool:
         #라운드가 홀수면 Player1 선 배팅
         #라운드가 짝수면 Player2 선 배팅
@@ -335,12 +347,12 @@ class GameLogic:
             while(1):
                 if(self.SelectBet(1) == False):
                     print("Player2 Won")
-                    self.player2.Win()
+                    self.player2.Win(self.player1.betMoney)
                     self.player1.Defeat()
                     return False
                 if(self.SelectBet(2) == False):
                     print("Player1 Won")
-                    self.player1.Win()
+                    self.player1.Win(self.player2.betMoney)
                     self.player2.Defeat()
                     return False
                 if(self.player1.betMoney == self.player2.betMoney):
@@ -349,12 +361,12 @@ class GameLogic:
             while (1):
                 if (self.SelectBet(2) == False):
                     print("Player1 Won")
-                    self.player1.Win()
+                    self.player1.Win(self.player2.betMoney)
                     self.player2.Defeat()
                     return False
                 if (self.SelectBet(1) == False):
                     print("Player2 Won")
-                    self.player2.Win()
+                    self.player2.Win(self.player1.betMoney)
                     self.player1.Defeat()
                     return False
                 if (self.player1.betMoney == self.player2.betMoney):
@@ -365,15 +377,13 @@ class GameLogic:
         if(result == -1):
             #player1 승
             print("Player1 Won")
-            self.player1.Win()
+            self.player1.Win(self.player2.betMoney)
             self.player2.Defeat()
         elif (result == 1):
             # player2 승
             print("Player2 Won")
-            self.player2.Win()
+            self.player2.Win(self.player1.betMoney)
             self.player1.Defeat()
-        self.round += 1
-
 
     def Start(self):
         while(1):
@@ -395,8 +405,8 @@ class GameLogic:
             #보유 칩 출력
             self.PrintRoundInfo()
             self.DealCard()
-            #self.master.SetOpponent(self.player1)
-            #self.master.GetRate()
+            self.master.SetOpponent(self.player1)
+            self.master.GetRate()
 
             #라운드 진행
             result = self.RoundProcess()
@@ -404,6 +414,8 @@ class GameLogic:
             #라운드 종료 후 돈 배분
             if(result):
                 self.FinishRound()
+            self.master.SetResult(result, copy.copy(self.player2))
+            self.round += 1
 
 while(1):
     DrawLine()
