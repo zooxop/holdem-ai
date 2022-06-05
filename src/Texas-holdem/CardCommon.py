@@ -70,11 +70,11 @@ class Player:
         self.round_result = result
 
     # betting & money related codes
-    def bet_money(self, bet_amount):
+    def bet_chip(self, bet_amount):
         if self.current_chips >= bet_amount:
-            return self.withdraw_money(bet_amount)
+            return self.withdraw_chip(bet_amount)
 
-    def withdraw_money(self, withdraw_amount):
+    def withdraw_chip(self, withdraw_amount):
         if self.current_chips > withdraw_amount:
             self.current_chips -= withdraw_amount
             return "normal"
@@ -84,10 +84,10 @@ class Player:
         else:
             return "abnormal"
 
-    def get_pot_money(self, pot_amount):
-        return self.save_money(pot_amount)
+    def get_pot_chip(self, pot_amount):
+        return self.save_chip(pot_amount)
 
-    def save_money(self, save_amount):
+    def save_chip(self, save_amount):
         self.current_chips += save_amount
         return "saved"
 
@@ -170,6 +170,99 @@ class Result:
         for card in self.hands:
             result_str = result_str + str(card) + '\n'
         return result_str
+
+
+# ward. 이 클래스부터 정리하고 UI에 적용하기.
+class HoldemMaster():
+    def __init__(self):
+        self.deck = Cards.StandardDeck()
+        self.rateWin : float = 0.0
+        self.rateDraw : float = 0.0
+        self.rateLose : float = 0.0
+        self.rateStraight : float = 0.0
+        self.myCharacter = Player(10)
+        self.opponent = Player(10)
+        self.turn = 0
+        self.result = -1
+
+    def SetOpponent(self, p : Player):
+        self.opponent = copy.copy(p)
+        self.myCharacter.hand = copy.copy(p.hand)
+        self.myCharacter.hand[2] = -1
+        for i in range(3):
+            c = Cards.Card(self.opponent.hand[i])
+            self.deck.remove(c)
+
+    def UpdateOpponent(self, oppo : Player):
+        self.opponent.chip = oppo.chip
+        self.opponent.betMoney = oppo.betMoney
+
+    def UpdateMe(self, me : Player):
+        self.myCharacter.chip = me.chip
+        self.myCharacter.betMoney = me.betMoney
+
+    def GetRate(self):
+        win : int = 0
+        draw : int = 0
+        lose : int = 0
+
+        for i in self.deck:
+            self.myCharacter.hand[2] = self.deck[i].value
+            result : int = GameLogic.GetMatch(self.myCharacter, self.opponent)
+            if(result == -1):
+                win += 1
+            elif(result == 0):
+                draw += 1
+            elif(result == 1):
+                lose += 1
+
+        total = len(self.deck)
+
+        self.rateWin = win / total
+        self.rateDraw = draw / total
+        self.rateLose = lose / total
+
+    #def ChooseBetMode(self):
+
+    def BetAlogorithm(self) -> BetInfo:
+        myBet: BetInfo
+        if(self.rateWin > 0.7):
+            maxBet = 0
+            if(self.opponent.chip >= self.myCharacter.chip):
+                maxBet = self.myCharacter.chip
+            else:
+                maxBet = self.opponent.chip
+
+            maxBet = int(maxBet * self.rateWin)
+
+            myBet.betType = 1
+            myBet.betValue = random.randrange(1, maxBet + 1)
+            self.turn += 1
+
+            return myBet
+        elif(self.rateWin > 0.5):
+            myBet.betType = 2
+            myBet.betValue = 0
+            self.turn += 1
+
+            return myBet
+        else:
+            if(self.rateUpStraight >= 0.15):
+                myBet.betType = 2
+                myBet.betValue = 0
+                self.turn += 1
+
+                return myBet
+            else:
+                myBet.betType = 3
+                myBet.betValue = 0
+                self.turn += 1
+
+                return myBet
+
+    def SetResult(self, res : int):
+        self.result = res
+        self.turn = 0
 
 
 class PokerHelper:

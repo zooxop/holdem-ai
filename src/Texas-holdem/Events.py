@@ -116,3 +116,14 @@ class NextRoundEvent(Event):
 class DealPreFlops(Event):
     def __init__(self):
         self.name = "PreFlops event only"
+
+
+class AKeyEvent(Event):
+    def __init__(self):
+        self.name = "Input A Key Event"
+
+
+class OpenPlayerCard(Event):
+    def __init__(self, player):
+        self.name = "Open the player's hidden card"
+        self.player = player
