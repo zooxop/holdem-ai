@@ -1,5 +1,6 @@
 # Pot : 판돈
 import random
+from enum import Enum
 
 
 class Card:
@@ -17,14 +18,44 @@ class Card:
         return '(suit:' + str(self.suit) + ', rank: ' + str(self.rank) + ')'
 
 
+class Combination(Enum):
+    TOP = 0
+    DOUBLE = 1
+    STRAIGHT = 2
+    TRIPLE = 3
+
+
 class Player:
     def __init__(self, name, position):
         self.name = name
         self.position = position
         self.holecards = []
         self.round_result = None
-        self.current_money = 100
+        self.current_chips = 30
         self.current_status = "Alive"
+
+        # 여기부터 직접 추가한 멤버변수
+        self.top = -1
+        self.combine = Combination.TOP
+
+    def SetCombineTop(self, community_cards):
+        hand_temp = [community_cards[0].GetRank(), community_cards[1].GetRank(), self.holecards[0].GetRank()]
+        hand_temp.sort()
+        if hand_temp[0] == hand_temp[1] == hand_temp[2]:
+            self.combine = Combination.TRIPLE
+            self.top = self.hand[2]
+        elif hand_temp[0] == (hand_temp[1] - 1) == (hand_temp[2] - 9) or hand_temp[0] == (hand_temp[1] - 1) == (hand_temp[2] - 2):
+            self.combine = Combination.STRAIGHT
+            if hand_temp[1] == 1:
+                self.top = self.hand[1]
+            else:
+                self.top = self.hand[2]
+        elif hand_temp[0] == hand_temp[1] or hand_temp[1] == hand_temp[2]:
+            self.combine = Combination.DOUBLE
+            self.top = hand_temp[1]
+        else:
+            self.combine = Combination.TOP
+            self.top = hand_temp[2]
 
     def add_cards(self, aCard):
         self.holecards.append(aCard)
@@ -40,15 +71,15 @@ class Player:
 
     # betting & money related codes
     def bet_money(self, bet_amount):
-        if self.current_money >= bet_amount:
+        if self.current_chips >= bet_amount:
             return self.withdraw_money(bet_amount)
 
     def withdraw_money(self, withdraw_amount):
-        if (self.current_money > withdraw_amount):
-            self.current_money -= withdraw_amount
+        if self.current_chips > withdraw_amount:
+            self.current_chips -= withdraw_amount
             return "normal"
-        elif (self.current_money == withdraw_amount):
-            self.current_money = 0
+        elif self.current_chips == withdraw_amount:
+            self.current_chips = 0
             return "allin"
         else:
             return "abnormal"
@@ -57,7 +88,7 @@ class Player:
         return self.save_money(pot_amount)
 
     def save_money(self, save_amount):
-        self.current_money += save_amount
+        self.current_chips += save_amount
         return "saved"
 
 
@@ -78,7 +109,7 @@ class Deck:
 
         # write some codes for initialize the deck
         for i in range(0, 4):
-            for j in range(0, 13):
+            for j in range(0, 10):
                 self.deck_cards.append(Card(i, j))
 
     def ShuffleDeck(self):
@@ -107,7 +138,21 @@ class Deck:
 
 class Pot:
     def __init__(self):
-        self.pot_money = 0
+        self.pot_chip = 0
+
+    def withdraw_chip(self, withdraw_amount):
+        if self.pot_chip > withdraw_amount:
+            self.pot_chip -= withdraw_amount
+            return "normal"
+        elif self.pot_chip == withdraw_amount:
+            self.pot_chip = 0
+            return "allin"
+        else:
+            return "abnormal"
+
+    def save_chip(self, save_amount):
+        self.pot_chip += save_amount
+        return "saved"
 
 
 class Result:

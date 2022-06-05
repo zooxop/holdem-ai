@@ -1,5 +1,6 @@
 import random
 
+
 class Card(object):
     def __init__(self, value):
         self.value = value
@@ -29,6 +30,7 @@ class Card(object):
 
         return value_name
 
+
 class StandardDeck(list):
     def __init__(self):
         super().__init__()
@@ -51,3 +53,4 @@ class StandardDeck(list):
 
 
 deck = StandardDeck()
+
