@@ -45,5 +45,12 @@ class StandardDeck(list):
     def deal(self):
         return self.pop(0)
 
+    def DeleteCard(self,value):
+        for i in range(0, len(self)):
+            if(self[i].value == value):
+                del self[i]
+                return
+
 
 deck = StandardDeck()
+
