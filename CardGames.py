@@ -44,8 +44,10 @@ wall_label.place(x = -3, y = -3)
 window.mainloop()
 '''
 
+
 def DrawLine():
     print("=======================================")
+
 
 class Combination(Enum):
     TOP = 0
@@ -53,35 +55,36 @@ class Combination(Enum):
     STRAIGHT = 2
     TRIPLE = 3
 
-class Player():
+
+class Player:
     def __init__(self, chip):
-        self.chip : int = chip
-        self.hand = [-1,-1,-1]
+        self.chip: int = chip
+        self.hand = [-1, -1, -1]
         self.combine = Combination.TOP
         self.top = -1
         self.betMoney = 0
 
-    def GetCombine(self):
+    def SetCombineTop(self):
         hand_temp = self.hand
         hand_temp.sort()
-        if(hand_temp[0] == hand_temp[1] ==hand_temp[2]):
+        if hand_temp[0] == hand_temp[1] == hand_temp[2]:
             self.combine = Combination.TRIPLE
             self.top = self.hand[2]
-        elif(hand_temp[0] == hand_temp[1] - 1 == hand_temp[2] - 9 or hand_temp[0] == hand_temp[1] - 1 == hand_temp[2] - 2):
+        elif hand_temp[0] == (hand_temp[1] - 1) == (hand_temp[2] - 9) or hand_temp[0] == (hand_temp[1] - 1) == (hand_temp[2] - 2):
             self.combine = Combination.STRAIGHT
-            if(hand_temp[1] == 1):
+            if hand_temp[1] == 1:
                 self.top = self.hand[1]
             else:
                 self.top = self.hand[2]
-        elif(hand_temp[0] == hand_temp[1] or hand_temp[1] == hand_temp[2]):
+        elif hand_temp[0] == hand_temp[1] or hand_temp[1] == hand_temp[2]:
             self.combine = Combination.DOUBLE
             self.top = hand_temp[1]
         else:
             self.combine = Combination.TOP
             self.top = hand_temp[2]
 
-    def BetChip(self, value : int) -> int:
-        if(value > self.chip):
+    def BetChip(self, value: int) -> int:
+        if value > self.chip:
             return 0
         self.chip -= value
         self.betMoney += value
@@ -193,7 +196,8 @@ class HoldemMaster():
         self.result = res
         self.turn = 0
 
-class GameLogic():
+
+class GameLogic:
     def __init__(self):
         self.deck = Cards.StandardDeck()
         self.deck.shuffle()
@@ -214,7 +218,7 @@ class GameLogic():
         self.player1.hand = [card1.value, card2.value, self.deck.deal().value]
         self.player2.hand = [card1.value, card2.value, self.deck.deal().value]
 
-    def PrintStatus(self, p1 : Player):
+    def PrintStatus(self, p1: Player):
         print("-----------------------------------")
         print("Opponent:", Cards.Card(p1.hand[2]))
         print("public:", Cards.Card(p1.hand[0]), Cards.Card(p1.hand[1]))
@@ -231,13 +235,13 @@ class GameLogic():
         if(p1.combine == p2.combine):
             if(p1.top == p2.top):
                 return 0
-            elif(p1.top > p2.top):
+            elif p1.top > p2.top:
                 return -1
-            elif(p1.top < p2.top):
+            elif p1.top < p2.top:
                 return 1
-        elif(p1.combine.value > p2.combine.value):
+        elif p1.combine.value > p2.combine.value:
             return -1
-        elif(p1.combine.value < p2.combine.value):
+        elif p1.combine.value < p2.combine.value:
             return 1
 
     def SelectBet(self, num : int) -> bool:
@@ -368,8 +372,8 @@ class GameLogic():
             print("Player2 Won")
             self.player2.Win()
             self.player1.Defeat()
-
         self.round += 1
+
 
     def Start(self):
         while(1):
@@ -414,7 +418,3 @@ while(1):
 
     elif(x==2):
         break
-
-
-
-
