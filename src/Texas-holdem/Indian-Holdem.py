@@ -8,6 +8,8 @@ COMMUNITY_CARD = 'community_card'
 AI_CARD = 'ai_card'
 COLOR_INACTIVE = pygame.Color('lightskyblue3')
 COLOR_ACTIVE = pygame.Color('dodgerblue2')
+BUTTON_COLOR_LIGHT = (170, 170, 170)
+BUTTON_COLOR_DARK = (100, 100, 100)
 
 
 class Game:
@@ -28,10 +30,9 @@ class Game:
         self.game_deck = Deck()
         self.players = []
         self.community_cards = []
-
         self.evManager = evManager
         self.evManager.RegisterListener(self)
-
+        self.master = HoldemMaster()  #
         self.state = Game.STATE_INITIAL
 
     # Event Notify
@@ -54,7 +55,7 @@ class Game:
 
         # 여기서 엔터키로 입력한 amount 값을 받아오고, 처리한다.
         if isinstance(event, BetAmountKeyPress):
-            print("Here is Game Class", event.amount)
+            self.deal_bet(self.players[1], event.amount)  # player[1]: User
             # to-do 베팅 로직 진행하기
 
         # 다음 라운드 넘어갈 때: 1. 이름 다시 써주기 2. 칩 금액 업데이트 해주기 3. 카드 새로 깔아주기
@@ -143,6 +144,11 @@ class Game:
     def open_playerCard(self):
         self.evManager.Post(OpenPlayerCard(self.players[1]))
 
+    def ReloadDeck(self):
+        self.game_deck = None
+        self.game_deck = Deck()
+        self.game_deck.ShuffleDeck()
+
     # pre-flop: 플레이어들에게 카드를 1장씩 나눠준다.
     def deal_preflop(self):
         self.state = Game.STATE_PREFLOP
@@ -151,6 +157,8 @@ class Game:
         player_count = len(self.players)
 
         for i in range(player_count):
+            if len(self.game_deck.deck_cards) == 0:
+                self.ReloadDeck()
             self.players[i % player_count].add_cards(self.game_deck.Pop_card())
 
         for player in self.players:
@@ -174,6 +182,14 @@ class Game:
     def check_top(self):
         print(self.players[0].SetCombineTop(self.community_cards))
 
+    def SelectBet(self, num):
+        print('-------------------------------------------------------')
+        print('Select bet')
+
+        # Player의 베팅 페이즈
+        if num == 1:
+            print("Player's turn")
+
     # Chip 베팅
     def bet_chips(self, player, amount):
         player.withdraw_chip(amount)
@@ -185,11 +201,13 @@ class Game:
         self.pot.withdraw_chip(amount)
 
     # bet : 원하는 금액 베팅
-    def deal_bet(self):
+    def deal_bet(self, player, amount):
         self.state = Game.STATE_BET
         print('-------------------------------------------------------')
         print('Bet Stage: 베팅할 금액 입력')
         # to-do
+        self.bet_chips(player, amount)  # 여기 하는중
+        self.evManager.Post(RefreshSprites(self.players, self.pot))
 
     # call : 추가 베팅 없이 진행
     def deal_call(self):
@@ -601,34 +619,48 @@ class ButtonSprite(pygame.sprite.Sprite):
         self.msg = msg
         self.fontcolor = (200, 30, 10)
         self.fontsize = 30
+        self.recSurf = pygame.Surface((1300, 700))
+        self.textSurf = self.writeSomething(self.msg)
 
-        calX = 0
-        calY = 8
+        self.calX = 0
+        self.calY = 8
         if len(msg) == 3:
-            calX = 7
+            self.calX = 7
         elif len(msg) == 4:
-            calX = 14
+            self.calX = 14
 
-        recSurf = pygame.Surface((1300, 700))
-        recSurf = recSurf.convert_alpha()
-        recSurf.fill((0, 0, 0, 0))  # make transparent
-
-        textSurf = self.writeSomething(self.msg)
-        self.image = textSurf
-        self.rect = textSurf.get_rect()
-        self.rect.centerx = self.position[0] + (self.width / len(msg)) + calX
-        self.rect.centery = self.position[1] + (self.height / 2) - calY
-
-        pygame.draw.rect(recSurf, (170, 170, 170), [self.position[0], self.position[1], self.width, self.height])
-        recSurf.blit(textSurf, (self.rect.centerx, self.rect.centery))
-        self.image = recSurf
-        self.rect = recSurf.get_rect()
+        self.drawButton(BUTTON_COLOR_LIGHT)
 
     def writeSomething(self, msg=""):
         myfont = pygame.font.SysFont("None", self.fontsize)
         mytext = myfont.render(msg, True, self.fontcolor)
         mytext = mytext.convert_alpha()
         return mytext
+
+    def drawButton(self, color):
+        self.recSurf = self.recSurf.convert_alpha()
+        self.recSurf.fill((0, 0, 0, 0))  # make transparent
+
+        self.image = self.textSurf
+        self.rect = self.textSurf.get_rect()
+        self.rect.centerx = self.position[0] + (self.width / len(self.msg)) + self.calX
+        self.rect.centery = self.position[1] + (self.height / 2) - self.calY
+
+        pygame.draw.rect(self.recSurf, color,
+                         [self.position[0], self.position[1], self.width, self.height])
+        self.recSurf.blit(self.textSurf, (self.rect.centerx, self.rect.centery))
+        self.image = self.recSurf
+        self.rect = self.recSurf.get_rect()
+
+    def isHover(self, mouse_pos):
+        x = mouse_pos[0]
+        y = mouse_pos[1]
+
+        if self.position[0] <= x <= (self.position[0] + self.width) and \
+                self.position[1] <= y <= (self.position[1] + self.height):
+            self.drawButton(BUTTON_COLOR_DARK)
+        else:
+            self.drawButton(BUTTON_COLOR_LIGHT)
 
     def update(self, seconds):
         pass
@@ -724,6 +756,7 @@ class PygameView:
         self.communitySprites = pygame.sprite.RenderUpdates()
         self.staticSprites = pygame.sprite.RenderUpdates()
         self.inputBoxSprites = pygame.sprite.RenderUpdates()
+        self.buttonSprites = pygame.sprite.RenderUpdates()
 
     def ShowCommunityCards(self, card_list):
         i = 0
@@ -793,9 +826,7 @@ class PygameView:
                                    (POS_LEFT - 15, POS_TOP + (bottomMultiply) * 30), player_type, self.playerSprites)
             TextSprite(player.name, (POS_LEFT - 20, POS_TOP - (bottomMultiply) * 40), 30, (150, 150, 150), self.playerSprites)
 
-        ButtonSprite("BET", (800, 450), 150, 40, self.communitySprites)
-        ButtonSprite("CALL", (800, 510), 150, 40, self.communitySprites)
-        ButtonSprite("FOLD", (800, 570), 150, 40, self.communitySprites)
+        self.ShowButtons()
         self.isButtonsVisible = True
 
     def InitializeFrontSprites(self):
@@ -815,10 +846,22 @@ class PygameView:
         for inputBoxSprite in self.inputBoxSprites:
             inputBoxSprite.kill()
 
+    def ShowButtons(self):
+        ButtonSprite("BET", (800, 450), 150, 40, self.buttonSprites)
+        ButtonSprite("CALL", (800, 510), 150, 40, self.buttonSprites)
+        ButtonSprite("FOLD", (800, 570), 150, 40, self.buttonSprites)
+
+    def HideButtons(self):
+        for buttonSprite in self.buttonSprites:
+            buttonSprite.kill()
+
     def ShowTable(self):
         TableSprite(self.backSprites)
 
     def ShowChips(self, players, pot):
+        for _sprite in self.staticSprites:
+            _sprite.kill()
+
         # AI
         ChipSprite([320, 50], self.staticSprites)
         TextSprite('X', (370, 50), 40, (200, 200, 200), self.staticSprites)
@@ -901,6 +944,9 @@ class PygameView:
 
     # ----------------------------------------------------------------------
     def Notify(self, event):
+        for buttonSprite in self.buttonSprites:
+            buttonSprite.isHover(pygame.mouse.get_pos())
+
         if isinstance(event, TickEvent):
             # Draw Everything
             self.backSprites.clear(self.window, self.background)
@@ -908,22 +954,25 @@ class PygameView:
             self.communitySprites.clear(self.window, self.background)
             self.staticSprites.clear(self.window, self.background)
             self.inputBoxSprites.clear(self.window, self.background)
+            self.buttonSprites.clear(self.window, self.background)
 
-            seconds = 60
+            seconds = 50
 
             self.backSprites.update(seconds)
             self.playerSprites.update(seconds)
             self.communitySprites.update(seconds)
             self.staticSprites.update(seconds)
             self.inputBoxSprites.update(seconds)
+            self.buttonSprites.update(seconds)
 
             dirtyRects1 = self.backSprites.draw(self.window)
             dirtyRects2 = self.playerSprites.draw(self.window)
             dirtyRects3 = self.communitySprites.draw(self.window)
             dirtyRects4 = self.staticSprites.draw(self.window)
             dirtyRects5 = self.inputBoxSprites.draw(self.window)
+            dirtyRects6 = self.buttonSprites.draw(self.window)
 
-            dirtyRects = dirtyRects1 + dirtyRects2 + dirtyRects3 + dirtyRects4 + dirtyRects5
+            dirtyRects = dirtyRects1 + dirtyRects2 + dirtyRects3 + dirtyRects4 + dirtyRects5 + dirtyRects6
             pygame.display.update(dirtyRects)
 
         if isinstance(event, GameStartRequest):
@@ -936,6 +985,7 @@ class PygameView:
             if amount != '':
                 self.player_bet_amount = int(amount)
                 self.ShowInputBox()  # inputBox visible false 처리
+                self.HideButtons()
                 self.evManager.Post(BetAmountKeyPress(amount))  # 여기서 Game 클래스로 입력값을 보낸다.
 
         # 백스페이스 입력 이벤트
@@ -983,6 +1033,9 @@ class PygameView:
 
         if isinstance(event, NextRoundEvent):
             self.NextRoundInitial(event.players, event.pot)
+
+        if isinstance(event, RefreshSprites):
+            self.ShowChips(event.players, event.pot)
 
 
 # ------------------------------------------------------

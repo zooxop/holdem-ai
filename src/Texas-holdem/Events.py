@@ -127,3 +127,10 @@ class OpenPlayerCard(Event):
     def __init__(self, player):
         self.name = "Open the player's hidden card"
         self.player = player
+
+
+class RefreshSprites(Event):
+    def __init__(self, players, pot):
+        self.name = "Refresh Sprites"
+        self.players = players
+        self.pot = pot
