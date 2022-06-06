@@ -37,6 +37,11 @@ class ClickCallButton(Event):
         self.name = "Call Button Click Event"
 
 
+class PlayerCallEvent(Event):
+    def __init__(self):
+        self.name = "Player Select Call"
+
+
 class ClickInputBox(Event):
     def __init__(self, mouse):
         self.name = "Input Box Click Event"
@@ -81,10 +86,11 @@ class NextTurnEvent(Event):
 
 
 class PreFlopEvent(Event):
-    def __init__(self, players, pot):
+    def __init__(self, players, pot, isPlayerTurn):
         self.name = "Pre-Flop Event"
         self.players = players
         self.pot = pot
+        self.isPlayerTurn = isPlayerTurn
 
 
 class FlopEvent(Event):
@@ -134,3 +140,9 @@ class RefreshSprites(Event):
         self.name = "Refresh Sprites"
         self.players = players
         self.pot = pot
+
+
+class PassTurn(Event):
+    def __init__(self, isPlayerTurn):
+        self.name = "Pass Turn Event"
+        self.isPlayerTurn = isPlayerTurn
