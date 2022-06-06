@@ -1,5 +1,6 @@
 import random
 
+
 class Card(object):
     def __init__(self, value):
         self.value = value
@@ -29,6 +30,7 @@ class Card(object):
 
         return value_name
 
+
 class StandardDeck(list):
     def __init__(self):
         super().__init__()
@@ -43,9 +45,9 @@ class StandardDeck(list):
     def deal(self):
         return self.pop(0)
 
-    def DeleteCard(self,value):
+    def DeleteCard(self, value):
         for i in range(0, len(self)):
-            if(self[i].value == value):
+            if self[i].value == value:
                 del self[i]
                 return
 
