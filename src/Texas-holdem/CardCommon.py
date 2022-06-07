@@ -50,13 +50,13 @@ class Player:
         hand_temp.sort()
         if hand_temp[0] == hand_temp[1] == hand_temp[2]:
             self.combine = Combination.TRIPLE
-            self.top = self.hand[2]
+            self.top = hand_temp[2]
         elif hand_temp[0] == (hand_temp[1] - 1) == (hand_temp[2] - 9) or hand_temp[0] == (hand_temp[1] - 1) == (hand_temp[2] - 2):
             self.combine = Combination.STRAIGHT
             if hand_temp[1] == 1:
-                self.top = self.hand[1]
+                self.top = hand_temp[1]
             else:
-                self.top = self.hand[2]
+                self.top = hand_temp[2]
         elif hand_temp[0] == hand_temp[1] or hand_temp[1] == hand_temp[2]:
             self.combine = Combination.DOUBLE
             self.top = hand_temp[1]
@@ -197,16 +197,21 @@ class HoldemMaster:
         # self.opponent = Player(10)
         self.turn = 0
         self.result = -1
+        self.limitBet = 0
 
     # 승/무/패 확률 계산하기
     def GetRate(self, deck: Deck, player: Player, opponent: Player):
         win: int = 0
         draw: int = 0
         lose: int = 0
+        straight: int = 0
 
         for card in deck.deck_cards:
-            player.holecards[2] = card.GetRank()
+            player.holecards[0] = card.GetRank()
             result: int = self.GetMatch(player, opponent)
+            if player.combine.value >= Combination.STRAIGHT.value:
+                straight += 1
+
             if result == -1:
                 win += 1
             elif result == 0:
@@ -219,9 +224,14 @@ class HoldemMaster:
         self.rateWin = win / total
         self.rateDraw = draw / total
         self.rateLose = lose / total
+        self.rateStraight = straight / total
+
+        self.limitBet = int((player.betChip + player.current_chips) * self.rateWin)
+        if self.limitBet >= opponent.current_chips:
+            self.limitBet = copy.copy(opponent.current_chips)
 
     @staticmethod
-    def GetMatch(self, p1: Player, p2: Player):
+    def GetMatch(p1: Player, p2: Player):
         # p1.SetCombineTop()  # 밖에서 하고 들어옴.
         # p2.SetCombineTop()
 
@@ -239,7 +249,7 @@ class HoldemMaster:
 
     def BetAlgorithm(self, player: Player, opponent: Player) -> BetInfo:
         myBet = BetInfo()
-        if self.rateWin > 0.7:
+        if self.rateWin > 0.6:
             if opponent.current_chips >= player.current_chips:
                 maxBet = player.current_chips
             else:
@@ -247,29 +257,57 @@ class HoldemMaster:
 
             maxBet = int(maxBet * self.rateWin)
 
-            myBet.betType = 1
-            myBet.betValue = random.randrange(1, maxBet + 1)
-            self.turn += 1
+            if player.betChip >= self.limitBet:
+                myBet.betType = 2
+                myBet.betValue = 0
+                print("AI : Call")
+                return myBet
 
+            baseBet = opponent.betChip - player.betChip
+
+            if baseBet >= self.limitBet - player.betChip:
+                myBet.betType = 2
+                myBet.betValue = 0
+                print("AI: Call")
+                return myBet
+
+            moneyBet = random.randrange(baseBet, self.limitBet - player.betChip)
+
+            if baseBet == moneyBet:
+                myBet.betType = 2
+                myBet.betValue = 0
+                print("AI: Call")
+                return myBet
+
+            myBet.betType = 1
+            myBet.betValue = moneyBet
+            print("AI: Bet /", myBet.betValue)
             return myBet
         elif self.rateWin > 0.5:
             myBet.betType = 2
             myBet.betValue = 0
-            self.turn += 1
-
+            print("AI: Call")
             return myBet
         else:
-            if self.rateUpStraight >= 0.15:
+            if not self.rateWin == 0:
+                if 20 <= random.randrange(0, 100):
+                    myBet.betType = 2
+                    myBet.betValue = 0
+
+            if self.rateStraight >= 0.4:
+                if player.betChip >= 10:
+                    myBet.betType = 3
+                    myBet.betValue = 0
+                    print("AI : Fold")
+                    return myBet
                 myBet.betType = 2
                 myBet.betValue = 0
-                self.turn += 1
-
+                print("AI : Call")
                 return myBet
             else:
                 myBet.betType = 3
                 myBet.betValue = 0
-                self.turn += 1
-
+                print("AI : Fold")
                 return myBet
 
     def SetResult(self, res: int):

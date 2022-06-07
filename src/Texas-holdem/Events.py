@@ -42,6 +42,11 @@ class PlayerCallEvent(Event):
         self.name = "Player Select Call"
 
 
+class PlayerFoldEvent(Event):
+    def __init__(self):
+        self.name = "Player Select Fold"
+
+
 class ClickInputBox(Event):
     def __init__(self, mouse):
         self.name = "Input Box Click Event"
@@ -136,13 +141,20 @@ class OpenPlayerCard(Event):
 
 
 class RefreshSprites(Event):
-    def __init__(self, players, pot):
+    def __init__(self, players, pot, ai_state):
         self.name = "Refresh Sprites"
         self.players = players
         self.pot = pot
+        self.ai_state = ai_state
 
 
 class PassTurn(Event):
-    def __init__(self, isPlayerTurn):
+    def __init__(self, isPlayerTurn, isRoundEnd):
         self.name = "Pass Turn Event"
         self.isPlayerTurn = isPlayerTurn
+        self.isRoundEnd = isRoundEnd
+
+
+class CallAITurn(Event):
+    def __init__(self):
+        self.name = "AI's Turn Event"

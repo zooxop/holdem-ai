@@ -276,6 +276,7 @@ class ButtonSprite(pygame.sprite.Sprite):
             self.drawButton(BUTTON_COLOR_LIGHT)
 
     def update(self, seconds):
+        # ward 여기다가 visible 여부 처리를 해줘야 delay 정상작동이 되나?
         pass
 
 

@@ -4,9 +4,13 @@ from CardCommon import *
 from GameSprites import *
 
 # To-do
-# 1. 서로 턴을 넘기는 이벤트를 만들어 줘야 함.
+# 1. 서로 턴을 넘기는 이벤트를 만들어 줘야 함. (ok)
 # 2. 턴을 넘길 때 STATE를 보고, AI가 BET을 주면 내 턴이 되면서 다시 버튼이 보임.
+#   - delay를 주는데, 버튼이 사라지지를 않네..
 # 3. AI의 selectBet 이벤트 작업하면 주고받고 완성 가능.
+#   - 맞게 계산하고 있는건지 검증 필요. (Bet 할 때 금액을 너무 크게 부른다 ㅡㅡ..)
+# 4. AI의 선택을 UI로 보여줘야 함. (ok)
+# 5. Round 종료 이벤트 만들어야 함.
 
 
 class Game:
@@ -52,9 +56,8 @@ class Game:
             #     self.InitializeRound()
 
         # 여기서 엔터키로 입력한 amount 값을 받아오고, 처리한다.
-        if isinstance(event, BetAmountKeyPress):
-            self.deal_bet(self.players[1], event.amount)  # player[1]: User
-            # to-do 베팅 로직 진행하기
+        if isinstance(event, BetAmountKeyPress):  # ward
+            self.deal_bet(self.players[1], self.players[0], event.amount)  # mine, opponent, amount
 
         # 다음 라운드 넘어갈 때: 1. 이름 다시 써주기 2. 칩 금액 업데이트 해주기 3. 카드 새로 깔아주기
         if isinstance(event, DealPreFlops):
@@ -96,6 +99,12 @@ class Game:
             # player[1] = Player(user)
             self.deal_call(self.players[1], self.players[0])  # 자기 자신, 상대방 순.
 
+        if isinstance(event, PlayerFoldEvent):
+            self.deal_fold(self.players[1])  # player[1] = Player(user)
+
+        if isinstance(event, CallAITurn):
+            self.SelectBet(self.players[0], self.players[1])  # AI의 선택은? ward to-do
+
     def Start(self):
         print('-------------------------------------------------------')
         print('Initialize Game: ')
@@ -136,7 +145,7 @@ class Game:
 
     def ClickCallButton(self):
         self.evManager.Post(ClickCallButton())
-        self.check_top()
+        # self.check_top()
 
     def ClickFoldButton(self):
         self.evManager.Post(ClickFoldButton())
@@ -165,7 +174,8 @@ class Game:
             self.players[i % player_count].add_cards(self.game_deck.Pop_card())
 
         for player in self.players:
-            self.bet_chips(player, 1)  # 1개씩 칩 베팅.
+            player.withdraw_chip(1)  # 참가비 1개씩.
+            self.pot.save_chip(1)
 
         self.evManager.Post(PreFlopEvent(self.players, self.pot, self.isPlayerTurn))
         self.PrintCards()
@@ -178,6 +188,9 @@ class Game:
         for i in range(2):
             self.community_cards.append(self.game_deck.Pop_card())
 
+        self.players[0].SetCombineTop(self.community_cards)
+        self.players[1].SetCombineTop(self.community_cards)  # 각 플레이어들의 Combine과 Top을 설정하고 넘어감.
+
         self.evManager.Post(FlopEvent(self.community_cards))
         self.PrintCards()
 
@@ -185,19 +198,46 @@ class Game:
     def check_top(self):
         print(self.players[0].SetCombineTop(self.community_cards))
 
-    def SelectBet(self, num):
+    # AI의 베팅 선택
+    def SelectBet(self, AI: Player, player: Player):
         print('-------------------------------------------------------')
         print('Select bet')
         # to-do: 이 펑션은 무조건 AI만 사용하는 걸로.
-        # AI의 베팅 페이즈
-        if num == 1:
-            print("AI's turn")
-        elif num == 2:
-            print("Player's turn")
+        AI.opponentCards = copy.copy(player.holecards)  # 플레이어의 카드 set.
+        print(self.game_deck.deck_cards)
+
+        self.master.GetRate(self.game_deck, AI, player)
+        myBet: BetInfo = self.master.BetAlgorithm(AI, player)
+        isRoundEnd = False
+        ai_state = ''
+        if myBet.betType == 1:
+            ai_state = "AI: Bet / chips :" + str(myBet.betValue)
+            self.bet_chips(AI, myBet.betValue)
+            self.state = Game.STATE_BET
+            isRoundEnd = False
+        elif myBet.betType == 2:
+            if self.state == Game.STATE_CALL:  # 플레이어가 이미 Call을 외친 상태라면.
+                isRoundEnd = True
+            ai_state = "AI: Call"
+            temp = player.betChip - AI.betChip
+            self.bet_chips(AI, temp)
+            self.state = Game.STATE_CALL
+        elif myBet.betType == 3:
+            ai_state = "AI: Fold"
+            isRoundEnd = True
+            self.state = Game.STATE_FOLD
+            if AI.combine.value == Combination.STRAIGHT.value:
+                self.bet_chips(AI, 10)  # Fold를 했는데 스트레이트 였다면 10개를 패널티로 내야 함.
+
+        print(ai_state)
+        self.evManager.Post(RefreshSprites(self.players, self.pot, ai_state))
+        self.isPlayerTurn = True
+        self.evManager.Post(PassTurn(self.isPlayerTurn, isRoundEnd))  # 턴 넘기기
 
     # Chip 베팅
     def bet_chips(self, player, amount):
-        player.withdraw_chip(amount)
+        # player.withdraw_chip(amount)
+        player.bet_chip(amount)
         self.pot.save_chip(amount)
 
     # Pot에서 Chip 가져오기
@@ -206,29 +246,47 @@ class Game:
         self.pot.withdraw_chip(amount)
 
     # bet : 원하는 금액 베팅
-    def deal_bet(self, player, amount):
+    def deal_bet(self, mine: Player, opponent: Player, amount):
         self.state = Game.STATE_BET
         print('-------------------------------------------------------')
         print('Bet Stage: 베팅할 금액 입력')
+        amount = int(amount)
         # to-do
-        self.bet_chips(player, amount)  # 여기 하는중
-        self.evManager.Post(RefreshSprites(self.players, self.pot))
+        if amount > mine.current_chips or amount > opponent.current_chips:
+            print("다시 입력")
+        elif amount + mine.betChip <= opponent.betChip:
+            print("over money:", opponent.betChip - mine.betChip)
+        else:
+            self.bet_chips(mine, amount)  # 여기 하는중
+            self.evManager.Post(RefreshSprites(self.players, self.pot, ''))
+            self.isPlayerTurn = False
+            self.evManager.Post(PassTurn(self.isPlayerTurn, False))  # Deal을 한다면 Round를 종료할 수 없다.
 
     # call : 추가 베팅 없이 진행
-    def deal_call(self, mine, opponent: Player):
+    def deal_call(self, mine, opponent: Player):  # ward
+        if self.state == Game.STATE_CALL:  # AI가 Call을 외친 상태였다면
+            isRoundEnd = True
+        else:
+            isRoundEnd = False
         self.state = Game.STATE_CALL
         print('-------------------------------------------------------')
         print('Call Stage: 추가 베팅 없이 진행')
 
-        self.bet_chips(mine, opponent.betChip)
+        self.bet_chips(mine, opponent.betChip)  # 상대방이 베팅한 만큼 내 칩도 베팅한다.
+        self.evManager.Post(RefreshSprites(self.players, self.pot, ''))
         self.isPlayerTurn = False
-        self.evManager.Post(PassTurn(self.isPlayerTurn))  # 턴 넘기기
+        self.evManager.Post(PassTurn(self.isPlayerTurn, isRoundEnd))  # 턴 넘기기
 
     # fold : 현재 턴 포기
-    def deal_fold(self):
+    def deal_fold(self, player: Player):
         self.state = Game.STATE_FOLD
         print('-------------------------------------------------------')
         print('Fold Stage: 현재 턴 포기')
+        if player.combine.value == Combination.STRAIGHT.value:
+            self.bet_chips(player, 10)  # Fold를 했는데 스트레이트 였다면 10개를 패널티로 내야 함.
+
+        self.isPlayerTurn = False
+        self.evManager.Post(PassTurn(self.isPlayerTurn, True))  # 턴 넘기기
 
     # show_down : 승자를 확인한다.
     def show_down(self):
@@ -446,6 +504,7 @@ class PygameView:
         self.staticSprites = pygame.sprite.RenderUpdates()
         self.inputBoxSprites = pygame.sprite.RenderUpdates()
         self.buttonSprites = pygame.sprite.RenderUpdates()
+        self.aiStateSprites = pygame.sprite.RenderUpdates()
 
     def ShowCommunityCards(self, card_list):
         i = 0
@@ -541,6 +600,12 @@ class PygameView:
     def ShowTable(self):
         TableSprite(self.backSprites)
 
+    def ShowAIState(self, ai_state):
+        for _sprite in self.aiStateSprites:
+            _sprite.kill()
+
+        TextSprite(ai_state, (100, 400), 50, (220, 220, 220), self.aiStateSprites)
+
     def ShowChips(self, players, pot):
         for _sprite in self.staticSprites:
             _sprite.kill()
@@ -625,9 +690,16 @@ class PygameView:
         # 플레이어 이름 글씨 다시 써주기
         self.evManager.Post(DealPreFlops())
 
-    def TurnOverEvent(self, isPlayerTurn: bool):
+    def TurnOverEvent(self, isPlayerTurn: bool, isRoundEnd: bool):
         self.HideInputBox()  # inputBox visible 처리
         self.ShowButtons(isPlayerTurn)  # Button visible 처리
+        if isRoundEnd:
+            # 라운드 종료 이벤트
+            print("라운드 종료해주삼")
+            pygame.time.wait(1000)  # 1초 딜레이
+        else:
+            if not isPlayerTurn:
+                self.evManager.Post(CallAITurn())  # AI의 차례 호출.
 
     def ShowInitGame(self):
         pass
@@ -645,6 +717,7 @@ class PygameView:
             self.staticSprites.clear(self.window, self.background)
             self.inputBoxSprites.clear(self.window, self.background)
             self.buttonSprites.clear(self.window, self.background)
+            self.aiStateSprites.clear(self.window, self.background)
 
             seconds = 50
 
@@ -654,6 +727,7 @@ class PygameView:
             self.staticSprites.update(seconds)
             self.inputBoxSprites.update(seconds)
             self.buttonSprites.update(seconds)
+            self.aiStateSprites.update(seconds)
 
             dirtyRects1 = self.backSprites.draw(self.window)
             dirtyRects2 = self.playerSprites.draw(self.window)
@@ -661,8 +735,9 @@ class PygameView:
             dirtyRects4 = self.staticSprites.draw(self.window)
             dirtyRects5 = self.inputBoxSprites.draw(self.window)
             dirtyRects6 = self.buttonSprites.draw(self.window)
+            dirtyRects7 = self.aiStateSprites.draw(self.window)
 
-            dirtyRects = dirtyRects1 + dirtyRects2 + dirtyRects3 + dirtyRects4 + dirtyRects5 + dirtyRects6
+            dirtyRects = dirtyRects1 + dirtyRects2 + dirtyRects3 + dirtyRects4 + dirtyRects5 + dirtyRects6 + dirtyRects7
             pygame.display.update(dirtyRects)
 
         if isinstance(event, GameStartRequest):
@@ -674,7 +749,6 @@ class PygameView:
             amount = self.DecideBettingAmount()
             if amount != '':
                 self.player_bet_amount = int(amount)
-                self.TurnOverEvent(False)
                 self.evManager.Post(BetAmountKeyPress(amount))  # 여기서 Game 클래스로 입력값을 보낸다.
 
         # 백스페이스 입력 이벤트
@@ -700,7 +774,7 @@ class PygameView:
 
         # "Fold" 버튼 클릭 이벤트.
         if isinstance(event, ClickFoldButton):
-            print("Fold button")
+            self.evManager.Post(PlayerFoldEvent())
 
         # InputBox 클릭(=>활성화/비활성화) 이벤트.
         if isinstance(event, ClickInputBox):
@@ -709,7 +783,7 @@ class PygameView:
 
         # 턴 넘기는 이벤트
         if isinstance(event, PassTurn):
-            self.TurnOverEvent(event.isPlayerTurn)
+            self.TurnOverEvent(event.isPlayerTurn, event.isRoundEnd)
 
         if isinstance(event, PreFlopEvent):
             self.ShowPreFlopCards(event.players, event.isPlayerTurn)
@@ -729,6 +803,7 @@ class PygameView:
 
         if isinstance(event, RefreshSprites):
             self.ShowChips(event.players, event.pot)
+            self.ShowAIState(event.ai_state)
 
 
 # ------------------------------------------------------
