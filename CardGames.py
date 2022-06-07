@@ -45,6 +45,7 @@ wall_label.place(x = -3, y = -3)
 window.mainloop()
 '''
 
+
 def DrawLine():
     print("=======================================")
 
@@ -276,7 +277,7 @@ class HoldemMaster:
         self.turn = 0
 
 
-class GameLogic():
+class GameLogic:
     def __init__(self):
         self.deck = Cards.StandardDeck()
         self.deck.shuffle()
