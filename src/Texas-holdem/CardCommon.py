@@ -308,11 +308,23 @@ class HoldemMaster:
                 myBet.betValue = 0
                 print("AI : Call")
                 return myBet
-            else:
-                myBet.betType = 3
-                myBet.betValue = 0
-                print("AI : Fold")
-                return myBet
+            else:  # fold 조건
+                if self.rateLose <= 0.1:
+                    if self.rateDraw == 1.0:
+                        myBet.betType = 3
+                        myBet.betValue = 0
+                        print("AI : Fold")
+                        return myBet
+                    else:
+                        myBet.betType = 2
+                        myBet.betValue = 0
+                        print("AI : Call")
+                        return myBet
+                else:
+                    myBet.betType = 3
+                    myBet.betValue = 0
+                    print("AI : Fold")
+                    return myBet
 
     def SetResult(self, res: int):
         self.result = res
