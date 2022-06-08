@@ -219,6 +219,10 @@ class HoldemMaster:
             elif result == 1:
                 lose += 1
 
+        if len(deck.deck_cards) == 0:
+            deck.InitializeDeck()
+            deck.ShuffleDeck()
+
         total = len(deck.deck_cards)
 
         self.rateWin = win / total

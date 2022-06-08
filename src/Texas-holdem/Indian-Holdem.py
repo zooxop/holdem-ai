@@ -36,6 +36,7 @@ class Game:
         self.evManager.RegisterListener(self)
         self.master = HoldemMaster()  #
         self.state = Game.STATE_INITIAL
+        self.round = 0
 
     # Event Notify
     def Notify(self, event):
@@ -44,6 +45,8 @@ class Game:
                 self.Start()
                 self.deal_preflop()
                 self.deal_flop()
+            elif self.state == Game.STATE_SHOWDOWN:
+                self.evManager.Post(NextRoundEvent(self.players, self.pot))  # 라운드 넘어가는 Event
 
         if isinstance(event, NextTurnEvent):
             if self.state == Game.STATE_PREPARING:
@@ -61,11 +64,18 @@ class Game:
 
         # 다음 라운드 넘어갈 때: 1. 이름 다시 써주기 2. 칩 금액 업데이트 해주기 3. 카드 새로 깔아주기
         if isinstance(event, DealPreFlops):
-            self.deal_preflop()
+            if self.players[0].current_chips == 0:
+                self.evManager.Post(ShowDownEvent(self.players[1], self.community_cards))
+            elif self.players[1].current_chips == 0:
+                self.evManager.Post(ShowDownEvent(self.players[0], self.community_cards))
+            else:
+                self.deal_preflop()
+                self.deal_flop()
 
         # 임시 이벤트(뒤집혀 있는 사용자 카드 보여주기)
         if isinstance(event, AKeyEvent):
-            self.open_playerCard()
+            # self.open_playerCard()
+            print(len(self.game_deck.deck_cards))
 
         if isinstance(event, MouseClickEvent):
             mouse = pygame.mouse.get_pos()
@@ -78,6 +88,8 @@ class Game:
             btnBetY = 450
             btnCallY = 510
             btnFoldY = 570
+            btnShowdownX = 570
+            btnShowdownY = 550
 
             inputX = 600
 
@@ -91,7 +103,12 @@ class Game:
                 elif mouse[1] in range(btnFoldY, btnFoldY + btnHeight):
                     # FOLD button click
                     self.ClickFoldButton()
-            elif mouse[0] in range(inputX, inputX + inputWidth):  # 베팅 금액 input box
+            elif mouse[0] in range(btnShowdownX, btnShowdownX + btnWidth):  # Showdown 버튼 클릭
+                if mouse[1] in range(btnShowdownY, btnShowdownY + btnHeight):
+                    # Showdown button click
+                    self.ClickShowdownButton()
+
+            if mouse[0] in range(inputX, inputX + inputWidth):  # 베팅 금액 input box
                 self.ClickInputBox(mouse)
 
         if isinstance(event, PlayerCallEvent):
@@ -153,6 +170,20 @@ class Game:
     def ClickInputBox(self, mouse):
         self.evManager.Post(ClickInputBox(mouse))
 
+    def ClickShowdownButton(self):  # to-do : 1. 돈 처리 / 2. showdown 버튼 안보이게 해주기 / 3. 다음 라운드 넘어가라고 space bar 누르면 인식되게.
+        msg = ''
+        if self.state == Game.STATE_FOLD:
+            if self.isPlayerTurn:  # Fold 인데, isPlayerTurn이 True이면 => AI가 Fold를 선언한 것임.
+                self.get_chips(self.players[1], self.pot.pot_chip)
+            else:  # isPlayerTurn이 False이면, 유저가 Fold를 선언한 것임.
+                self.get_chips(self.players[0], self.pot.pot_chip)
+        else:
+            msg = self.show_down()  # Fold가 아닐때만 승자 확인.
+
+        self.PrintCards()
+        self.state = Game.STATE_SHOWDOWN
+        self.evManager.Post(RoundEndEvent(self.players, msg, self.pot, len(self.game_deck.deck_cards)))
+
     def open_playerCard(self):
         self.evManager.Post(OpenPlayerCard(self.players[1]))
 
@@ -168,6 +199,10 @@ class Game:
         print('Pre-Flop Stage: Deal 2 Hold Cards for each players')
         player_count = len(self.players)
 
+        self.players[0].holecards.clear()
+        self.players[1].holecards.clear()
+        self.round += 1
+
         for i in range(player_count):
             if len(self.game_deck.deck_cards) == 0:
                 self.ReloadDeck()
@@ -177,7 +212,7 @@ class Game:
             player.withdraw_chip(1)  # 참가비 1개씩.
             self.pot.save_chip(1)
 
-        self.evManager.Post(PreFlopEvent(self.players, self.pot, self.isPlayerTurn))
+        self.evManager.Post(PreFlopEvent(self.players, self.pot, self.isPlayerTurn, self.round, len(self.game_deck.deck_cards)))
         self.PrintCards()
 
     # flop : 커뮤니티 카드 2장을 깔아준다.
@@ -185,13 +220,14 @@ class Game:
         self.state = Game.STATE_FLOP
         print('-------------------------------------------------------')
         print('Flop Stage: Deal 2 Community Cards')
+        self.community_cards.clear()
         for i in range(2):
             self.community_cards.append(self.game_deck.Pop_card())
 
         self.players[0].SetCombineTop(self.community_cards)
         self.players[1].SetCombineTop(self.community_cards)  # 각 플레이어들의 Combine과 Top을 설정하고 넘어감.
 
-        self.evManager.Post(FlopEvent(self.community_cards))
+        self.evManager.Post(FlopEvent(self.community_cards, len(self.game_deck.deck_cards)))
         self.PrintCards()
 
     # 플레이어의 top 확인.
@@ -216,7 +252,7 @@ class Game:
             self.state = Game.STATE_BET
             isRoundEnd = False
         elif myBet.betType == 2:
-            if self.state == Game.STATE_CALL:  # 플레이어가 이미 Call을 외친 상태라면.
+            if self.state == Game.STATE_BET or self.state == Game.STATE_CALL:  # 플레이어가 이미 Bet, Call을 외친 상태라면.
                 isRoundEnd = True
             ai_state = "AI: Call"
             temp = player.betChip - AI.betChip
@@ -230,15 +266,19 @@ class Game:
                 self.bet_chips(AI, 10)  # Fold를 했는데 스트레이트 였다면 10개를 패널티로 내야 함.
 
         print(ai_state)
-        self.evManager.Post(RefreshSprites(self.players, self.pot, ai_state))
+        self.evManager.Post(RefreshSprites(self.players, self.pot, ai_state, len(self.game_deck.deck_cards)))
         self.isPlayerTurn = True
         self.evManager.Post(PassTurn(self.isPlayerTurn, isRoundEnd))  # 턴 넘기기
 
     # Chip 베팅
     def bet_chips(self, player, amount):
         # player.withdraw_chip(amount)
-        player.bet_chip(amount)
-        self.pot.save_chip(amount)
+        temp = amount
+        if player.current_chips < amount:
+            temp = player.current_chips
+
+        player.bet_chip(temp)
+        self.pot.save_chip(temp)
 
     # Pot에서 Chip 가져오기
     def get_chips(self, player, amount):
@@ -258,7 +298,7 @@ class Game:
             print("over money:", opponent.betChip - mine.betChip)
         else:
             self.bet_chips(mine, amount)  # 여기 하는중
-            self.evManager.Post(RefreshSprites(self.players, self.pot, ''))
+            self.evManager.Post(RefreshSprites(self.players, self.pot, '', len(self.game_deck.deck_cards)))
             self.isPlayerTurn = False
             self.evManager.Post(PassTurn(self.isPlayerTurn, False))  # Deal을 한다면 Round를 종료할 수 없다.
 
@@ -273,7 +313,7 @@ class Game:
         print('Call Stage: 추가 베팅 없이 진행')
 
         self.bet_chips(mine, opponent.betChip)  # 상대방이 베팅한 만큼 내 칩도 베팅한다.
-        self.evManager.Post(RefreshSprites(self.players, self.pot, ''))
+        self.evManager.Post(RefreshSprites(self.players, self.pot, '', len(self.game_deck.deck_cards)))
         self.isPlayerTurn = False
         self.evManager.Post(PassTurn(self.isPlayerTurn, isRoundEnd))  # 턴 넘기기
 
@@ -293,13 +333,24 @@ class Game:
         self.state = Game.STATE_SHOWDOWN
         print('-------------------------------------------------------')
         print('ShowDown Stage: Check BestCards and Choose Winner')
-        for player in self.players:
-            print('Player ' + str(player.position) + ': \n')
-            player.choice_best_cards(self.community_cards)
-            PokerHelper.PrintCards(player.round_result.hands)
-
-        winner = self.GetWinner()
-        self.evManager.Post(ShowDownEvent(winner, self.community_cards, winner.round_result.hands))
+        result = self.master.GetMatch(self.players[0], self.players[1])
+        self.players[0].betChip = 0
+        self.players[1].betChip = 0
+        if result == -1:
+            self.get_chips(self.players[0], self.pot.pot_chip)
+            return "Winner: AI"
+        elif result == 1:
+            self.get_chips(self.players[1], self.pot.pot_chip)
+            return "Winner: User"
+        elif result == 0:
+            return "Draw"
+        # for player in self.players:
+        #     print('Player ' + str(player.position) + ': \n')
+        #     player.choice_best_cards(self.community_cards)
+        #     PokerHelper.PrintCards(player.round_result.hands)
+        #
+        # winner = self.GetWinner()
+        # self.evManager.Post(ShowDownEvent(winner, self.community_cards, winner.round_result.hands))
 
     def GetWinner(self):
         players = self.players
@@ -468,7 +519,7 @@ class KeyboardController:
 # ------------------------------------------------------
 # PygameView
 class PygameView:
-    DECK_POSITION = [750, 50]
+    DECK_POSITION = [750, 60]
     isButtonsVisible = False
     inputBox1 = None
     player_bet_amount = 0
@@ -505,6 +556,7 @@ class PygameView:
         self.inputBoxSprites = pygame.sprite.RenderUpdates()
         self.buttonSprites = pygame.sprite.RenderUpdates()
         self.aiStateSprites = pygame.sprite.RenderUpdates()
+        self.deckCntSprites = pygame.sprite.RenderUpdates()
 
     def ShowCommunityCards(self, card_list):
         i = 0
@@ -512,7 +564,7 @@ class PygameView:
             i += 2
             CardSprite(card, self.DECK_POSITION, (350 + i * 100, 350), COMMUNITY_CARD, self.communitySprites)
 
-    def ShowShowDownResult(self, player, community_cards, card_list):
+    def ShowShowDownResult(self, player, community_cards):
 
         for aSprite in self.playerSprites:
             if isinstance(aSprite, TextSprite):
@@ -524,20 +576,20 @@ class PygameView:
             cardSprite.kill()
 
         # Redraw Comminity Card with small size above Winner Announcing
-        RectSprite((400, 140), 500, 120, self.communitySprites)
+        # RectSprite((400, 140), 500, 120, self.communitySprites)
 
-        i = 0
-        for card in community_cards:
-            i += 1
-            CardSprite(card, self.DECK_POSITION, (350 + i * 100, 200), COMMUNITY_CARD, self.communitySprites)
-
-        i = 0
-        for card in card_list:
-            i += 1
-            CardSprite(card, self.DECK_POSITION, (350 + i * 100, 450), COMMUNITY_CARD, self.communitySprites)
+        # i = 0
+        # for card in community_cards:
+        #     i += 1
+        #     CardSprite(card, self.DECK_POSITION, (350 + i * 100, 200), COMMUNITY_CARD, self.communitySprites)
+        #
+        # i = 0
+        # for card in card_list:
+        #     i += 1
+        #     CardSprite(card, self.DECK_POSITION, (350 + i * 100, 450), COMMUNITY_CARD, self.communitySprites)
 
         TextSprite("The Winner is " + player.name, (550, 300), 60, (200, 30, 10), self.communitySprites)
-        TextSprite("\"" + player.round_result.result_name + "\"", (550, 360), 50, (200, 40, 200), self.communitySprites)
+        # TextSprite("\"" + player.round_result.result_name + "\"", (550, 360), 50, (200, 40, 200), self.communitySprites)
 
         self.isButtonsVisible = False
 
@@ -604,7 +656,16 @@ class PygameView:
         for _sprite in self.aiStateSprites:
             _sprite.kill()
 
-        TextSprite(ai_state, (100, 400), 50, (220, 220, 220), self.aiStateSprites)
+        TextSprite(ai_state, (150, 400), 50, (220, 220, 220), self.aiStateSprites)
+
+    def RefreshDeckCnt(self, deck_cnt):
+        for _sprite in self.deckCntSprites:
+            _sprite.kill()
+
+        # Card deck
+        CardSprite(Card(0, 0), self.DECK_POSITION, self.DECK_POSITION, DECK_CARD, self.deckCntSprites)
+        TextSprite('X', (800, 60), 40, (200, 200, 200), self.deckCntSprites)
+        TextSprite(str(deck_cnt), (830, 60), 40, (200, 200, 200), self.deckCntSprites)
 
     def ShowChips(self, players, pot):
         for _sprite in self.staticSprites:
@@ -687,19 +748,36 @@ class PygameView:
         for inputBoxSprite in self.inputBoxSprites:
             inputBoxSprite.kill()
 
+        for aiSprite in self.aiStateSprites:
+            aiSprite.kill()
+
         # 플레이어 이름 글씨 다시 써주기
         self.evManager.Post(DealPreFlops())
 
     def TurnOverEvent(self, isPlayerTurn: bool, isRoundEnd: bool):
         self.HideInputBox()  # inputBox visible 처리
-        self.ShowButtons(isPlayerTurn)  # Button visible 처리
+        # self.ShowButtons(isPlayerTurn)  # Button visible 처리
         if isRoundEnd:
-            # 라운드 종료 이벤트
-            print("라운드 종료해주삼")
-            pygame.time.wait(1000)  # 1초 딜레이
+            pygame.time.delay(1000)  # 1초 딜레이
+            self.ShowButtons(False)
+            self.ShowShowdownButton()
         else:
+            self.ShowButtons(isPlayerTurn)
             if not isPlayerTurn:
                 self.evManager.Post(CallAITurn())  # AI의 차례 호출.
+
+    def ShowShowdownButton(self):
+        # 라운드 종료 이벤트 버튼
+        ButtonSprite(" Showdown", (570, 550), 150, 40, self.buttonSprites)
+
+    def RoundEndProcess(self, players, msg, pot, deck_cnt):
+        # 라운드 종료 프로세스
+        self.OpenPlayerCardEvent(players[1])  # 카드 보여주기
+        self.ShowChips(players, pot)
+        self.RefreshDeckCnt(deck_cnt)
+        self.ShowAIState(msg)
+        self.ShowButtons(False)
+        TextSprite('Press SPACE BAR', (600, 650), 40, (220, 220, 220), self.staticSprites)
 
     def ShowInitGame(self):
         pass
@@ -718,6 +796,7 @@ class PygameView:
             self.inputBoxSprites.clear(self.window, self.background)
             self.buttonSprites.clear(self.window, self.background)
             self.aiStateSprites.clear(self.window, self.background)
+            self.deckCntSprites.clear(self.window, self.background)
 
             seconds = 50
 
@@ -728,6 +807,7 @@ class PygameView:
             self.inputBoxSprites.update(seconds)
             self.buttonSprites.update(seconds)
             self.aiStateSprites.update(seconds)
+            self.deckCntSprites.update(seconds)
 
             dirtyRects1 = self.backSprites.draw(self.window)
             dirtyRects2 = self.playerSprites.draw(self.window)
@@ -736,8 +816,9 @@ class PygameView:
             dirtyRects5 = self.inputBoxSprites.draw(self.window)
             dirtyRects6 = self.buttonSprites.draw(self.window)
             dirtyRects7 = self.aiStateSprites.draw(self.window)
+            dirtyRects8 = self.deckCntSprites.draw(self.window)
 
-            dirtyRects = dirtyRects1 + dirtyRects2 + dirtyRects3 + dirtyRects4 + dirtyRects5 + dirtyRects6 + dirtyRects7
+            dirtyRects = dirtyRects1 + dirtyRects2 + dirtyRects3 + dirtyRects4 + dirtyRects5 + dirtyRects6 + dirtyRects7 + dirtyRects8
             pygame.display.update(dirtyRects)
 
         if isinstance(event, GameStartRequest):
@@ -785,15 +866,22 @@ class PygameView:
         if isinstance(event, PassTurn):
             self.TurnOverEvent(event.isPlayerTurn, event.isRoundEnd)
 
+        if isinstance(event, RoundEndEvent):
+            self.RoundEndProcess(event.players, event.msg, event.pot, event.deck_cnt)
+
         if isinstance(event, PreFlopEvent):
             self.ShowPreFlopCards(event.players, event.isPlayerTurn)
             self.ShowChips(event.players, event.pot)
+            self.RefreshDeckCnt(event.deck_cnt)
+            if event.round % 2 == 0:
+                self.evManager.Post(CallAITurn())
 
         if isinstance(event, FlopEvent):
             self.ShowCommunityCards(event.card_list)
+            self.RefreshDeckCnt(event.deck_cnt)
 
         if isinstance(event, ShowDownEvent):
-            self.ShowShowDownResult(event.player, event.community_cards, event.card_list)
+            self.ShowShowDownResult(event.player, event.community_cards)
 
         if isinstance(event, InitializeRoundEvent):
             self.InitializeFrontSprites()
@@ -803,6 +891,7 @@ class PygameView:
 
         if isinstance(event, RefreshSprites):
             self.ShowChips(event.players, event.pot)
+            self.RefreshDeckCnt(event.deck_cnt)
             self.ShowAIState(event.ai_state)
 
 

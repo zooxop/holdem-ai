@@ -4,6 +4,7 @@ import random
 PLAYER_CARD = 'player_card'
 COMMUNITY_CARD = 'community_card'
 AI_CARD = 'ai_card'
+DECK_CARD = 'deck_card'
 COLOR_INACTIVE = pygame.Color('lightskyblue3')
 COLOR_ACTIVE = pygame.Color('dodgerblue2')
 BUTTON_COLOR_LIGHT = (170, 170, 170)
@@ -69,7 +70,7 @@ class CardSprite(pygame.sprite.Sprite):
 
         rank_str = str(rank + 1)
 
-        if self.type == PLAYER_CARD:
+        if self.type == PLAYER_CARD or self.type == DECK_CARD:
             return 'assets/Card_Back.png'
         elif self.type == AI_CARD or self.type == COMMUNITY_CARD:
             return 'assets/Card_' + rank_str + '.png'

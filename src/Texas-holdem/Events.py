@@ -91,25 +91,28 @@ class NextTurnEvent(Event):
 
 
 class PreFlopEvent(Event):
-    def __init__(self, players, pot, isPlayerTurn):
+    def __init__(self, players, pot, isPlayerTurn, _round, deck_cnt):
         self.name = "Pre-Flop Event"
         self.players = players
         self.pot = pot
         self.isPlayerTurn = isPlayerTurn
+        self.round = _round
+        self.deck_cnt = deck_cnt
 
 
 class FlopEvent(Event):
-    def __init__(self, card_list):
+    def __init__(self, card_list, deck_cnt):
         self.name = "Flop Event"
         self.card_list = card_list
+        self.deck_cnt = deck_cnt
 
 
 class ShowDownEvent(Event):
-    def __init__(self, player, community_cards, card_list):
+    def __init__(self, player, community_cards):
         self.name = "ShowDown"
         self.player = player
         self.community_cards = community_cards
-        self.card_list = card_list
+        # self.card_list = card_list
 
 
 class InitializeRoundEvent(Event):
@@ -141,11 +144,12 @@ class OpenPlayerCard(Event):
 
 
 class RefreshSprites(Event):
-    def __init__(self, players, pot, ai_state):
+    def __init__(self, players, pot, ai_state, deck_cnt):
         self.name = "Refresh Sprites"
         self.players = players
         self.pot = pot
         self.ai_state = ai_state
+        self.deck_cnt = deck_cnt
 
 
 class PassTurn(Event):
@@ -158,3 +162,12 @@ class PassTurn(Event):
 class CallAITurn(Event):
     def __init__(self):
         self.name = "AI's Turn Event"
+
+
+class RoundEndEvent(Event):
+    def __init__(self, players, msg, pot, deck_cnt):
+        self.name = "Showdown button click event"
+        self.players = players
+        self.msg = msg
+        self.pot = pot
+        self.deck_cnt = deck_cnt
