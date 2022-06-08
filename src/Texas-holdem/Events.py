@@ -37,6 +37,16 @@ class ClickCallButton(Event):
         self.name = "Call Button Click Event"
 
 
+class PlayerCallEvent(Event):
+    def __init__(self):
+        self.name = "Player Select Call"
+
+
+class PlayerFoldEvent(Event):
+    def __init__(self):
+        self.name = "Player Select Fold"
+
+
 class ClickInputBox(Event):
     def __init__(self, mouse):
         self.name = "Input Box Click Event"
@@ -81,24 +91,28 @@ class NextTurnEvent(Event):
 
 
 class PreFlopEvent(Event):
-    def __init__(self, players, pot):
+    def __init__(self, players, pot, isPlayerTurn, _round, deck_cnt):
         self.name = "Pre-Flop Event"
         self.players = players
         self.pot = pot
+        self.isPlayerTurn = isPlayerTurn
+        self.round = _round
+        self.deck_cnt = deck_cnt
 
 
 class FlopEvent(Event):
-    def __init__(self, card_list):
+    def __init__(self, card_list, deck_cnt):
         self.name = "Flop Event"
         self.card_list = card_list
+        self.deck_cnt = deck_cnt
 
 
 class ShowDownEvent(Event):
-    def __init__(self, player, community_cards, card_list):
+    def __init__(self, player, community_cards):
         self.name = "ShowDown"
         self.player = player
         self.community_cards = community_cards
-        self.card_list = card_list
+        # self.card_list = card_list
 
 
 class InitializeRoundEvent(Event):
@@ -116,3 +130,44 @@ class NextRoundEvent(Event):
 class DealPreFlops(Event):
     def __init__(self):
         self.name = "PreFlops event only"
+
+
+class AKeyEvent(Event):
+    def __init__(self):
+        self.name = "Input A Key Event"
+
+
+class OpenPlayerCard(Event):
+    def __init__(self, player):
+        self.name = "Open the player's hidden card"
+        self.player = player
+
+
+class RefreshSprites(Event):
+    def __init__(self, players, pot, ai_state, deck_cnt):
+        self.name = "Refresh Sprites"
+        self.players = players
+        self.pot = pot
+        self.ai_state = ai_state
+        self.deck_cnt = deck_cnt
+
+
+class PassTurn(Event):
+    def __init__(self, isPlayerTurn, isRoundEnd):
+        self.name = "Pass Turn Event"
+        self.isPlayerTurn = isPlayerTurn
+        self.isRoundEnd = isRoundEnd
+
+
+class CallAITurn(Event):
+    def __init__(self):
+        self.name = "AI's Turn Event"
+
+
+class RoundEndEvent(Event):
+    def __init__(self, players, msg, pot, deck_cnt):
+        self.name = "Showdown button click event"
+        self.players = players
+        self.msg = msg
+        self.pot = pot
+        self.deck_cnt = deck_cnt

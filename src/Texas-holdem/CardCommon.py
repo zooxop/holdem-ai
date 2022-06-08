@@ -1,5 +1,6 @@
 # Pot : 판돈
 import random
+import copy
 from enum import Enum
 
 
@@ -9,7 +10,7 @@ class Card:
         self.rank = rank
 
     def GetRank(self):
-        return self.rank
+        return self.rank  # 카드 랭크
 
     def GetSuit(self):
         return self.suit
@@ -37,19 +38,25 @@ class Player:
         # 여기부터 직접 추가한 멤버변수
         self.top = -1
         self.combine = Combination.TOP
+        self.opponentCards = []  # [0],[1] : 공유카드 / [2] : 상대방의 카드
+        self.betChip = 0  # 베팅한 금액
+
+    # 상대방의 패와 공유 카드 상태값을 Set
+    def SetOpponent(self, opponent_player):
+        self.opponentCards = copy.copy(opponent_player.holecards)
 
     def SetCombineTop(self, community_cards):
         hand_temp = [community_cards[0].GetRank(), community_cards[1].GetRank(), self.holecards[0].GetRank()]
         hand_temp.sort()
         if hand_temp[0] == hand_temp[1] == hand_temp[2]:
             self.combine = Combination.TRIPLE
-            self.top = self.hand[2]
+            self.top = hand_temp[2]
         elif hand_temp[0] == (hand_temp[1] - 1) == (hand_temp[2] - 9) or hand_temp[0] == (hand_temp[1] - 1) == (hand_temp[2] - 2):
             self.combine = Combination.STRAIGHT
             if hand_temp[1] == 1:
-                self.top = self.hand[1]
+                self.top = hand_temp[1]
             else:
-                self.top = self.hand[2]
+                self.top = hand_temp[2]
         elif hand_temp[0] == hand_temp[1] or hand_temp[1] == hand_temp[2]:
             self.combine = Combination.DOUBLE
             self.top = hand_temp[1]
@@ -70,24 +77,25 @@ class Player:
         self.round_result = result
 
     # betting & money related codes
-    def bet_money(self, bet_amount):
+    def bet_chip(self, bet_amount):
         if self.current_chips >= bet_amount:
-            return self.withdraw_money(bet_amount)
+            self.betChip = bet_amount
+            return self.withdraw_chip(bet_amount)
 
-    def withdraw_money(self, withdraw_amount):
-        if self.current_chips > withdraw_amount:
-            self.current_chips -= withdraw_amount
+    def withdraw_chip(self, withdraw_amount):
+        if self.current_chips > int(withdraw_amount):
+            self.current_chips -= int(withdraw_amount)
             return "normal"
-        elif self.current_chips == withdraw_amount:
+        elif self.current_chips == int(withdraw_amount):
             self.current_chips = 0
             return "allin"
         else:
             return "abnormal"
 
-    def get_pot_money(self, pot_amount):
-        return self.save_money(pot_amount)
+    def get_pot_chip(self, pot_amount):
+        return self.save_chip(pot_amount)
 
-    def save_money(self, save_amount):
+    def save_chip(self, save_amount):
         self.current_chips += save_amount
         return "saved"
 
@@ -151,7 +159,7 @@ class Pot:
             return "abnormal"
 
     def save_chip(self, save_amount):
-        self.pot_chip += save_amount
+        self.pot_chip += int(save_amount)
         return "saved"
 
 
@@ -170,6 +178,145 @@ class Result:
         for card in self.hands:
             result_str = result_str + str(card) + '\n'
         return result_str
+
+
+class BetInfo:
+    betType: int = None
+    betValue: int = None
+
+
+# ward. 이 클래스부터 정리하고 UI에 적용하기.
+class HoldemMaster:
+    def __init__(self):
+        # self.deck = Cards.StandardDeck()
+        self.rateWin: float = 0.0
+        self.rateDraw: float = 0.0
+        self.rateLose: float = 0.0
+        self.rateStraight: float = 0.0
+        # self.myCharacter = Player(10)
+        # self.opponent = Player(10)
+        self.turn = 0
+        self.result = -1
+        self.limitBet = 0
+
+    # 승/무/패 확률 계산하기
+    def GetRate(self, deck: Deck, player: Player, opponent: Player):
+        win: int = 0
+        draw: int = 0
+        lose: int = 0
+        straight: int = 0
+
+        for card in deck.deck_cards:
+            player.holecards[0] = card.GetRank()
+            result: int = self.GetMatch(player, opponent)
+            if player.combine.value >= Combination.STRAIGHT.value:
+                straight += 1
+
+            if result == -1:
+                win += 1
+            elif result == 0:
+                draw += 1
+            elif result == 1:
+                lose += 1
+
+        if len(deck.deck_cards) == 0:
+            deck.InitializeDeck()
+            deck.ShuffleDeck()
+
+        total = len(deck.deck_cards)
+
+        self.rateWin = win / total
+        self.rateDraw = draw / total
+        self.rateLose = lose / total
+        self.rateStraight = straight / total
+
+        self.limitBet = int((player.betChip + player.current_chips) * self.rateWin)
+        if self.limitBet >= opponent.current_chips:
+            self.limitBet = copy.copy(opponent.current_chips)
+
+    @staticmethod
+    def GetMatch(p1: Player, p2: Player):
+        # p1.SetCombineTop()  # 밖에서 하고 들어옴.
+        # p2.SetCombineTop()
+
+        if p1.combine == p2.combine:
+            if p1.top == p2.top:
+                return 0
+            elif p1.top > p2.top:
+                return -1
+            elif p1.top < p2.top:
+                return 1
+        elif p1.combine.value > p2.combine.value:
+            return -1
+        elif p1.combine.value < p2.combine.value:
+            return 1
+
+    def BetAlgorithm(self, player: Player, opponent: Player) -> BetInfo:
+        myBet = BetInfo()
+        if self.rateWin > 0.6:
+            if opponent.current_chips >= player.current_chips:
+                maxBet = player.current_chips
+            else:
+                maxBet = opponent.current_chips
+
+            maxBet = int(maxBet * self.rateWin)
+
+            if player.betChip >= self.limitBet:
+                myBet.betType = 2
+                myBet.betValue = 0
+                print("AI : Call")
+                return myBet
+
+            baseBet = opponent.betChip - player.betChip
+
+            if baseBet >= self.limitBet - player.betChip:
+                myBet.betType = 2
+                myBet.betValue = 0
+                print("AI: Call")
+                return myBet
+
+            moneyBet = random.randrange(baseBet, self.limitBet - player.betChip)
+
+            if baseBet == moneyBet:
+                myBet.betType = 2
+                myBet.betValue = 0
+                print("AI: Call")
+                return myBet
+
+            myBet.betType = 1
+            myBet.betValue = moneyBet
+            print("AI: Bet /", myBet.betValue)
+            return myBet
+        elif self.rateWin > 0.5:
+            myBet.betType = 2
+            myBet.betValue = 0
+            print("AI: Call")
+            return myBet
+        else:
+            if not self.rateWin == 0:
+                if 20 <= random.randrange(0, 100):
+                    myBet.betType = 2
+                    myBet.betValue = 0
+
+            if self.rateStraight >= 0.4:
+                if player.betChip >= 10:
+                    myBet.betType = 3
+                    myBet.betValue = 0
+                    print("AI : Fold")
+                    return myBet
+                myBet.betType = 2
+                myBet.betValue = 0
+                print("AI : Call")
+                return myBet
+            else:
+                myBet.betType = 3
+                myBet.betValue = 0
+                print("AI : Fold")
+                return myBet
+
+    def SetResult(self, res: int):
+        self.result = res
+        self.turn = 0
 
 
 class PokerHelper:
