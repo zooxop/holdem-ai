@@ -1,14 +1,16 @@
 import copy
 
+import numpy as np
+
 import Cards
 from Cards import deck
 from enum import Enum
 from Cards import *
 from tkinter import *
 import random
+import sklearn
+import pandas as pd
 
-
-# import matplotlib.pyplot as plt
 '''
 Indian Holdem
 Rule:   플레이어는 2명으로 40장의 카드를 덱으로 구성
@@ -21,29 +23,50 @@ Rule:   플레이어는 2명으로 40장의 카드를 덱으로 구성
         라운드 종료시 트리플>스트레이트>더블>탑 순서로 승자 결정
         라운드 시작시 칩이 없으면 패배
 '''
-'''
-class CardGame:
-    def __init__(self, r):
-        s = Frame(r, height=720, width=1280, bg="white", cursor="hand2")
-        s.pack()
 
-        pt_card_back   = PhotoImage(file="asset//Card_Back.png")
-        pt_table       = PhotoImage(file="asset//Board.png")
-        pt_chips       = PhotoImage(file="asset//Chip.png")
 
-        table = Label(pt_table)
-        table.place(x=0, y=0)
+class BetStd:
+    stdMax: float = None
+    stdMin: float = None
 
-window = Tk()
-window.title("Indian Holdem")
-window.geometry("1280x720")
+def GetCsvAvg(path) -> float:
+    df = pd.read_csv(path)
+    total = df['Result'].sum()
+    return total / df['Result'].count()
 
-wall       = PhotoImage(file="asset//Board.png")
-wall_label = Label(image= wall)
-wall_label.place(x = -3, y = -3)
+class StandardInfo():
+    def __init__(self, max, min, avg):
+        self.max = max
+        self.min = min
+        self.avg = avg
 
-window.mainloop()
-'''
+
+def GetBestBetStd() -> BetStd:
+    standard = BetStd()
+    stds = []
+
+    stds.append(StandardInfo(2, 1, GetCsvAvg('../Downloads/수정 파일/WinRate_2_1.csv')))
+    stds.append(StandardInfo(3, 1, GetCsvAvg('../Downloads/수정 파일/WinRate_3_1.csv')))
+    stds.append(StandardInfo(3, 2, GetCsvAvg('../Downloads/수정 파일/WinRate_3_2.csv')))
+    stds.append(StandardInfo(4, 1, GetCsvAvg('../Downloads/수정 파일/WinRate_4_1.csv')))
+    stds.append(StandardInfo(4, 2, GetCsvAvg('../Downloads/수정 파일/WinRate_4_2.csv')))
+    stds.append(StandardInfo(4, 3, GetCsvAvg('../Downloads/수정 파일/WinRate_4_3.csv')))
+    stds.append(StandardInfo(5, 2, GetCsvAvg('../Downloads/수정 파일/WinRate_5_2.csv')))
+    stds.append(StandardInfo(5, 3, GetCsvAvg('../Downloads/수정 파일/WinRate_5_3.csv')))
+    stds.append(StandardInfo(5, 4, GetCsvAvg('../Downloads/수정 파일/WinRate_5_4.csv')))
+    stds.append(StandardInfo(6, 3, GetCsvAvg('../Downloads/수정 파일/WinRate_6_3.csv')))
+    stds.append(StandardInfo(6, 4, GetCsvAvg('../Downloads/수정 파일/WinRate_6_4.csv')))
+    stds.append(StandardInfo(6, 5, GetCsvAvg('../Downloads/수정 파일/WinRate_6_5.csv')))
+    stds.append(StandardInfo(7, 6, GetCsvAvg('../Downloads/수정 파일/WinRate_7_6.csv')))
+    stds.append(StandardInfo(8, 7, GetCsvAvg('../Downloads/수정 파일/WinRate_8_7.csv')))
+
+    topStd = StandardInfo(0, 0, 0)
+    for i in range(0,14):
+        if topStd.avg <= stds[i].avg:
+            topStd = stds[i]
+    standard.stdMax = topStd.max
+    standard.stdMin = topStd.min
+    return standard
 
 
 def DrawLine():
@@ -71,7 +94,8 @@ class Player:
         if hand_temp[0] == hand_temp[1] == hand_temp[2]:
             self.combine = Combination.TRIPLE
             self.top = self.hand[2]
-        elif hand_temp[0] == hand_temp[1] - 1 == hand_temp[2] - 9 or hand_temp[0] == hand_temp[1] - 1 == hand_temp[2] - 2:
+        elif hand_temp[0] == hand_temp[1] - 1 == hand_temp[2] - 9 or hand_temp[0] == hand_temp[1] - 1 == hand_temp[
+            2] - 2:
             self.combine = Combination.STRAIGHT
             if hand_temp[1] == 1:
                 self.top = self.hand[1]
@@ -163,6 +187,8 @@ class HoldemMaster:
             return 1
 
     def GetRate(self):
+        if len(self.deck) == 0:
+            self.deck = StandardDeck()
         win: int = 0
         draw: int = 0
         lose: int = 0
@@ -190,9 +216,9 @@ class HoldemMaster:
         if self.limitBet >= self.opponent.chip:
             self.limitBet = copy.copy(self.opponent.chip)
 
-    def BetAlogorithm(self) -> BetInfo:
+    def BetAlogorithm(self, betStd: float, callStd: float) -> BetInfo:
         myBet = BetInfo()
-        if self.rateWin > 0.6:
+        if self.rateWin > betStd:
             maxBet = 0
             if self.opponent.chip >= self.myCharacter.chip:
                 maxBet = self.myCharacter.chip
@@ -230,7 +256,7 @@ class HoldemMaster:
             print("Bet:", myBet.betValue)
 
             return myBet
-        elif self.rateWin > 0.5:
+        elif self.rateWin > callStd:
             myBet.betType = 2
             myBet.betValue = 0
             self.turn += 1
@@ -244,7 +270,6 @@ class HoldemMaster:
                     myBet.betType = 2
                     myBet.betValue = 0
                     self.turn += 1
-
 
             if self.rateStraight >= 0.4:
                 if self.myCharacter.betMoney >= 10:
@@ -273,11 +298,19 @@ class HoldemMaster:
 
     def SetResult(self, res: int, p1: Player):
         self.result = res
+        self.myCharacter.hand[2] = copy.copy(p1.hand[2])
         self.deck.DeleteCard(copy.copy(p1.hand[2]))
+        self.result = self.GetMatch()
+        if self.result == -1:
+            self.result = 2
+        elif self.result == 0:
+            self.result = 1
+        elif self.result == 1:
+            self.result = 0
         self.turn = 0
 
 
-class GameLogic:
+class GameLogic():
     def __init__(self):
         self.deck = Cards.StandardDeck()
         self.deck.shuffle()
@@ -285,6 +318,11 @@ class GameLogic:
         self.player1 = Player(30)
         self.player2 = Player(30)
         self.master = HoldemMaster()
+        self.master2 = HoldemMaster()
+        # self.df = pd.read_csv('WinRate_2D5_1.csv', header=0)
+        # self.featureName = list(self.df.columns.values)
+        # self.arr = self.df.values
+        self.limit: BetStd = GetBestBetStd()
 
     def ReloadDeck(self):
         self.deck = Cards.StandardDeck()
@@ -330,40 +368,32 @@ class GameLogic:
         # Player1의 배팅 페이즈
         if num == 1:
             print("Player1's turn")
-            self.player2.PrintCards()
+            self.master2.UpdatePlayers(copy.copy(self.player1), copy.copy(self.player2))
 
-            print("1. Bet\n2. call\n3. fold")
-            x = int(input("선택:"))
+            myBet: BetInfo = self.master2.BetAlogorithm(0.6, 0.5)
 
-            if x == 1:
-                while 1:
-                    coin = int(input("베팅: "))
-                    if coin > self.player1.chip or coin > self.player2.chip:
-                        print("다시 입력")
-                    elif coin + self.player1.betMoney <= self.player2.betMoney:
-                        print("over money:", self.player2.betMoney - self.player1.betMoney)
-                    else:
-                        self.player1.BetChip(coin)
-                        break
+            if myBet.betType == 1:
+                self.player1.BetChip(myBet.betValue)
 
                 return True
-            elif x == 2:
+            elif myBet.betType == 2:
                 temp = self.player2.betMoney - self.player1.betMoney
                 self.player1.BetChip(temp)
 
                 return True
-            elif x == 3:
+            elif myBet.betType == 3:
                 self.player1.GetCombine()
                 if self.player1.combine.value >= Combination.STRAIGHT.value:
                     self.player1.BetChip(10)
 
                 return False
+
         # Player2의 배팅 페이즈
         elif num == 2:
             print("Player2's turn")
             self.master.UpdatePlayers(copy.copy(self.player2), copy.copy(self.player1))
 
-            myBet: BetInfo = self.master.BetAlogorithm()
+            myBet: BetInfo = self.master.BetAlogorithm(self.limit.stdMax, self.limit.stdMin)
 
             if myBet.betType == 1:
                 self.player2.BetChip(myBet.betValue)
@@ -432,11 +462,17 @@ class GameLogic:
             # 플레이어1 잔액 확인 후 없으면 게임 종료
             if self.player1.betMoney <= 0:
                 if self.player1.chip <= 0:
+                    # self.arr = np.append(self.arr, np.array([[1]]), axis=0)  # player2 win
+                    # self.df = pd.DataFrame(self.arr, columns=['Result'])
+                    # self.df.to_csv('WinRate_2D5_1.csv', index=False)
                     print("Player2 won")
                     break
             # 플레이어2 잔액 확인 후 없으면 게임 종료
             if self.player2.betMoney <= 0:
                 if self.player2.chip <= 0:
+                    # self.arr = np.append(self.arr, np.array([[0]]), axis=0)  # player2 win
+                    # self.df = pd.DataFrame(self.arr, columns=['Result'])
+                    # self.df.to_csv('WinRate_2D5_1.csv', index=False)
                     print("Player1 won")
                     break
             if not (self.player1.betMoney and self.player2.betMoney):
@@ -448,6 +484,8 @@ class GameLogic:
             self.DealCard()
             self.master.SetOpponent(self.player1)
             self.master.GetRate()
+            self.master2.SetOpponent(self.player2)
+            self.master2.GetRate()
 
             # 라운드 진행
             result = self.RoundProcess()
@@ -459,16 +497,9 @@ class GameLogic:
             self.round += 1
 
 
-while 1:
-    DrawLine()
-    print("게임 시작")
-    print("1. 시작")
-    print("2. 종료")
-    x = int(input("선택:"))
 
-    if x == 1:
-        game = GameLogic()
-        game.Start()
+DrawLine()
 
-    elif x == 2:
-        break
+game = GameLogic()
+game.Start()
+
